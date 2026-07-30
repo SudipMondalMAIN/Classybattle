@@ -1,11 +1,11 @@
-# ClassyBattle — Backend (Phase 1 + Phase 2: Foundation, Auth & Tournament Core)
+# ClassyBattle — Backend (Phase 1 + Phase 2 + Phase 3: Foundation, Auth, Tournament Core & Game Modes)
 
 Production-grade FastAPI backend for the ClassyBattle eSports Tournament Platform.
 
-> **Scope note:** Phase 1 (foundation + authentication) and Phase 2 (Tournament Core) are
-> implemented. Wallet, Payments, Referral, and Admin Dashboard business logic are
-> intentionally **not** implemented yet — the architecture is preserved so these plug in
-> cleanly in later phases.
+> **Scope note:** Phase 1 (foundation + authentication), Phase 2 (Tournament Core), and
+> Phase 3 (Game Modes) are implemented. Wallet, Payments, Referral, and Admin Dashboard
+> business logic are intentionally **not** implemented yet — the architecture is preserved
+> so these plug in cleanly in later phases.
 
 ## Phase 2 — Tournament Core
 
@@ -26,6 +26,27 @@ Adds the `tournaments` table and a full REST module under `/api/v1/tournaments`:
   and as DB `CHECK`/`UNIQUE` constraints (`migrations/versions/0002_tournaments.py`).
 
 ---
+
+## Phase 3 — Game Modes
+
+Adds the `game_modes` table and a full REST module under `/api/v1/game-modes`, scoped
+per-`Game` (e.g. "Battle Royale" / "Clash Squad" for Free Fire, "Solo" / "Duo" / "Squad"
+for BGMI):
+
+- Full CRUD (create, update, get by id, get by slug, list, soft delete) with pagination,
+  sorting (`name`, `created_at`, `sort_order`), and filtering (by game, active, featured,
+  and text search across name/slug).
+- Automatic, collision-safe slug generation, unique per game (`app/utils/slug.py`, reused
+  from Phase 2).
+- Validation: game must exist and be active, duplicate name/slug within the same game is
+  rejected, `min_players`/`max_players`/`max_team_size` are cross-checked for consistency —
+  enforced in both the service layer and DB `CHECK`/`UNIQUE` constraints
+  (`migrations/versions/0003_game_modes.py`).
+- Authorization: read APIs (`list`, `get`, `get by slug`) are public; create, update, and
+  soft-delete are restricted to `admin` / `super_admin` via the existing `require_admin`
+  dependency (`app/dependencies/auth.py`).
+- Tracks `created_by` / `updated_by` for audit purposes, plus `icon_url` / `image_url`,
+  `short_name`, `description`, and `sort_order` for client-side display.
 
 ## 1. Tech Stack
 
@@ -136,8 +157,8 @@ pytest
 See `.env.example` for the full list (app, database, JWT, OTP, Supabase, Brevo, Firebase, CORS,
 rate limiting, logging).
 
-## 8. Explicitly Out of Scope (Phase 1 + 2)
+## 8. Explicitly Out of Scope (Phase 1 + 2 + 3)
 
 Wallet, Add/Withdraw Money, Referral, Admin Dashboard business features, Payment Gateway
-integration, and tournament registration/bracket/match logic — architecture is preserved so
-these plug in cleanly later.
+integration, tournament registration/bracket/match logic, and map/lookup modules beyond
+Game Modes — architecture is preserved so these plug in cleanly later.
