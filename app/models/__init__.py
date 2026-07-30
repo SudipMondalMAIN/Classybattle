@@ -7,6 +7,7 @@ from app.models.device_token import DeviceToken
 from app.models.game import Game
 from app.models.game_mode import GameMode
 from app.models.game_profile import UserGameProfile
+from app.models.map import Map
 from app.models.notification import Notification
 from app.models.otp import OTP
 from app.models.refresh_token import RefreshToken
@@ -21,6 +22,7 @@ __all__ = [
     "Game",
     "GameMode",
     "UserGameProfile",
+    "Map",
     "Notification",
     "DeviceToken",
     "Tournament",
