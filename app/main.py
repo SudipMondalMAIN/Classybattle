@@ -31,7 +31,7 @@ async def lifespan(app: FastAPI):
 def create_app() -> FastAPI:
     app = FastAPI(
         title=settings.APP_NAME,
-        description="ClassyBattle eSports Tournament Platform API — Phases 1-6: Foundation, Auth, Tournament Core, Game Modes, Registration & Team System",
+        description="ClassyBattle eSports Tournament Platform API — Phases 1-7: Foundation, Auth, Tournament Core, Game Modes, Registration & Team System, Room Management & Match Lifecycle",
         version="1.0.0",
         docs_url="/docs",
         redoc_url="/redoc",

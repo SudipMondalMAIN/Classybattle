@@ -8,6 +8,13 @@ from app.models.game import Game
 from app.models.game_mode import GameMode
 from app.models.game_profile import UserGameProfile
 from app.models.map import Map
+from app.models.match import MATCH_STATUS_TRANSITIONS, Match, MatchStatus, RoomStatus
+from app.models.match_participant import (
+    MATCH_CHECKIN_TRANSITIONS,
+    MatchAssignmentType,
+    MatchCheckInStatus,
+    MatchParticipant,
+)
 from app.models.notification import Notification
 from app.models.otp import OTP
 from app.models.participant import (
@@ -50,4 +57,12 @@ __all__ = [
     "TeamMember",
     "TeamMemberRole",
     "TeamRegistrationMode",
+    "Match",
+    "MatchStatus",
+    "RoomStatus",
+    "MATCH_STATUS_TRANSITIONS",
+    "MatchParticipant",
+    "MatchAssignmentType",
+    "MatchCheckInStatus",
+    "MATCH_CHECKIN_TRANSITIONS",
 ]
