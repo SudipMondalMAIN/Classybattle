@@ -1,0 +1,272 @@
+"""
+Tournament service — validation, slug/status management, and orchestration
+between the repository layer and Supabase-backed asset storage.
+"""
+from datetime import datetime, timezone
+from typing import Optional
+from uuid import UUID, uuid4
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.exceptions import (
+    BadRequestException,
+    ConflictException,
+    ForbiddenException,
+    NotFoundException,
+    ValidationException,
+)
+from app.models.tournament import (
+    TOURNAMENT_STATUS_TRANSITIONS,
+    Tournament,
+    TournamentStatus,
+)
+from app.models.user import User, UserRole
+from app.repositories.game_repository import GameRepository
+from app.repositories.tournament_repository import TournamentRepository
+from app.schemas.tournament import TournamentCreate, TournamentUpdate
+from app.storage.storage_service import StorageService
+from app.utils.slug import generate_unique_suffix, slugify
+
+# Asset upload constraints for banner/cover images.
+_ALLOWED_IMAGE_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp"}
+_MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024  # 5 MB
+
+_MANAGER_ROLES = {UserRole.ADMIN, UserRole.SUPER_ADMIN}
+
+
+class TournamentService:
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+        self.repo = TournamentRepository(session)
+        self.game_repo = GameRepository(session)
+        self.storage = StorageService(bucket="tournament-assets")
+
+    # ------------------------------------------------------------------
+    # Authorization helpers
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _is_admin(user: User) -> bool:
+        return user.role in _MANAGER_ROLES
+
+    def _assert_can_manage(self, tournament: Tournament, user: User) -> None:
+        if self._is_admin(user):
+            return
+        if tournament.created_by is not None and tournament.created_by == user.id:
+            return
+        raise ForbiddenException("You do not have permission to manage this tournament")
+
+    # ------------------------------------------------------------------
+    # Slug helpers
+    # ------------------------------------------------------------------
+    async def _generate_unique_slug(self, title: str) -> str:
+        base = slugify(title)
+        candidate = base
+        # A handful of attempts with random suffixes comfortably avoids
+        # collisions without an unbounded loop.
+        for _ in range(5):
+            if not await self.repo.slug_exists(candidate):
+                return candidate
+            candidate = f"{base}-{generate_unique_suffix()}"
+        # Extremely unlikely fallback: fully random suffix guarantees uniqueness.
+        return f"{base}-{uuid4().hex[:10]}"
+
+    # ------------------------------------------------------------------
+    # Validation helpers
+    # ------------------------------------------------------------------
+    async def _assert_game_exists(self, game_id: UUID) -> None:
+        game = await self.game_repo.get_by_id(game_id)
+        if game is None or not game.is_active:
+            raise NotFoundException("Game not found or inactive")
+
+    @staticmethod
+    def _assert_valid_status_transition(
+        current: TournamentStatus, target: TournamentStatus
+    ) -> None:
+        if current == target:
+            return
+        allowed = TOURNAMENT_STATUS_TRANSITIONS.get(current, set())
+        if target not in allowed:
+            raise ValidationException(
+                f"Cannot transition tournament from '{current.value}' to '{target.value}'"
+            )
+
+    @staticmethod
+    def _validate_asset(content_type: str, file_bytes: bytes) -> None:
+        if content_type not in _ALLOWED_IMAGE_CONTENT_TYPES:
+            raise ValidationException(
+                "Unsupported file type. Allowed types: JPEG, PNG, WEBP"
+            )
+        if len(file_bytes) > _MAX_IMAGE_SIZE_BYTES:
+            raise ValidationException("File is too large. Maximum size is 5 MB")
+        if len(file_bytes) == 0:
+            raise ValidationException("Uploaded file is empty")
+
+    # ------------------------------------------------------------------
+    # CRUD
+    # ------------------------------------------------------------------
+    async def create_tournament(
+        self, payload: TournamentCreate, current_user: User
+    ) -> Tournament:
+        await self._assert_game_exists(payload.game_id)
+
+        if await self.repo.title_exists(payload.title, payload.game_id):
+            raise ConflictException(
+                "A tournament with this title already exists for this game"
+            )
+
+        slug = await self._generate_unique_slug(payload.title)
+
+        tournament = await self.repo.create(
+            title=payload.title,
+            slug=slug,
+            description=payload.description,
+            game_id=payload.game_id,
+            mode_id=payload.mode_id,
+            map_id=payload.map_id,
+            organizer=payload.organizer,
+            entry_fee=payload.entry_fee,
+            prize_pool=payload.prize_pool,
+            max_players=payload.max_players,
+            current_players=0,
+            registration_start=payload.registration_start,
+            registration_end=payload.registration_end,
+            tournament_start=payload.tournament_start,
+            tournament_end=payload.tournament_end,
+            visibility=payload.visibility,
+            is_featured=payload.is_featured,
+            status=TournamentStatus.DRAFT,
+            created_by=current_user.id,
+        )
+        await self.session.commit()
+        return tournament
+
+    async def get_by_id(self, tournament_id: UUID, include_deleted: bool = False) -> Tournament:
+        tournament = await self.repo.get_by_id(tournament_id, include_deleted=include_deleted)
+        if tournament is None:
+            raise NotFoundException("Tournament not found")
+        return tournament
+
+    async def get_by_slug(self, slug: str) -> Tournament:
+        tournament = await self.repo.get_by_slug(slug)
+        if tournament is None:
+            raise NotFoundException("Tournament not found")
+        return tournament
+
+    async def list_tournaments(
+        self,
+        *,
+        page: int,
+        page_size: int,
+        game_id: Optional[UUID],
+        status: Optional[TournamentStatus],
+        visibility,
+        is_featured: Optional[bool],
+        search: Optional[str],
+        sort_by: str,
+        sort_order: str,
+        requesting_user: Optional[User],
+    ):
+        include_private = requesting_user is not None and self._is_admin(requesting_user)
+        items, total = await self.repo.list_paginated(
+            page=page,
+            page_size=page_size,
+            game_id=game_id,
+            status=status,
+            visibility=visibility,
+            is_featured=is_featured,
+            search=search,
+            sort_by=sort_by,
+            sort_order=sort_order,
+            include_private=include_private,
+        )
+        return items, total
+
+    async def update_tournament(
+        self, tournament_id: UUID, payload: TournamentUpdate, current_user: User
+    ) -> Tournament:
+        tournament = await self.get_by_id(tournament_id)
+        self._assert_can_manage(tournament, current_user)
+
+        update_data = payload.model_dump(exclude_unset=True)
+
+        if "title" in update_data and update_data["title"] != tournament.title:
+            if await self.repo.title_exists(update_data["title"], tournament.game_id):
+                raise ConflictException(
+                    "A tournament with this title already exists for this game"
+                )
+            update_data["slug"] = await self._generate_unique_slug(update_data["title"])
+
+        reg_start = update_data.get("registration_start", tournament.registration_start)
+        reg_end = update_data.get("registration_end", tournament.registration_end)
+        t_start = update_data.get("tournament_start", tournament.tournament_start)
+        t_end = update_data.get("tournament_end", tournament.tournament_end)
+
+        if reg_end <= reg_start:
+            raise ValidationException("registration_end must be after registration_start")
+        if t_end <= t_start:
+            raise ValidationException("tournament_end must be after tournament_start")
+        if t_start < reg_start:
+            raise ValidationException("tournament_start cannot be before registration_start")
+
+        tournament = await self.repo.update(tournament, **update_data)
+        await self.session.commit()
+        return tournament
+
+    async def update_status(
+        self, tournament_id: UUID, target_status: TournamentStatus, current_user: User
+    ) -> Tournament:
+        tournament = await self.get_by_id(tournament_id)
+        self._assert_can_manage(tournament, current_user)
+
+        self._assert_valid_status_transition(tournament.status, target_status)
+
+        tournament = await self.repo.update(tournament, status=target_status)
+        await self.session.commit()
+        return tournament
+
+    async def soft_delete_tournament(self, tournament_id: UUID, current_user: User) -> None:
+        tournament = await self.get_by_id(tournament_id)
+        self._assert_can_manage(tournament, current_user)
+        await self.repo.soft_delete(tournament)
+        await self.session.commit()
+
+    # ------------------------------------------------------------------
+    # Asset uploads
+    # ------------------------------------------------------------------
+    async def upload_banner(
+        self,
+        tournament_id: UUID,
+        file_bytes: bytes,
+        content_type: str,
+        current_user: User,
+    ) -> Tournament:
+        tournament = await self.get_by_id(tournament_id)
+        self._assert_can_manage(tournament, current_user)
+        self._validate_asset(content_type, file_bytes)
+
+        extension = content_type.split("/")[-1]
+        path = f"tournaments/{tournament.id}/banner-{uuid4().hex[:8]}.{extension}"
+        url = await self.storage.upload_file(path, file_bytes, content_type)
+
+        tournament = await self.repo.update(tournament, banner_url=url)
+        await self.session.commit()
+        return tournament
+
+    async def upload_cover(
+        self,
+        tournament_id: UUID,
+        file_bytes: bytes,
+        content_type: str,
+        current_user: User,
+    ) -> Tournament:
+        tournament = await self.get_by_id(tournament_id)
+        self._assert_can_manage(tournament, current_user)
+        self._validate_asset(content_type, file_bytes)
+
+        extension = content_type.split("/")[-1]
+        path = f"tournaments/{tournament.id}/cover-{uuid4().hex[:8]}.{extension}"
+        url = await self.storage.upload_file(path, file_bytes, content_type)
+
+        tournament = await self.repo.update(tournament, cover_url=url)
+        await self.session.commit()
+        return tournament

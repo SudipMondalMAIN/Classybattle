@@ -9,6 +9,7 @@ from app.models.game_profile import UserGameProfile
 from app.models.notification import Notification
 from app.models.otp import OTP
 from app.models.refresh_token import RefreshToken
+from app.models.tournament import Tournament, TournamentStatus, TournamentVisibility
 from app.models.user import User
 
 __all__ = [
@@ -20,4 +21,7 @@ __all__ = [
     "UserGameProfile",
     "Notification",
     "DeviceToken",
+    "Tournament",
+    "TournamentStatus",
+    "TournamentVisibility",
 ]

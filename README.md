@@ -1,10 +1,29 @@
-# ClassyBattle — Backend (Phase 1: Foundation & Authentication)
+# ClassyBattle — Backend (Phase 1 + Phase 2: Foundation, Auth & Tournament Core)
 
-Production-grade FastAPI backend foundation for the ClassyBattle eSports Tournament Platform.
+Production-grade FastAPI backend for the ClassyBattle eSports Tournament Platform.
 
-> **Scope note:** This is Phase 1 only. Tournament, Wallet, Payments, Referral, and Admin
-> Dashboard business logic are intentionally **not** implemented — only the architectural
-> foundation and authentication system, built so later phases can be added without rework.
+> **Scope note:** Phase 1 (foundation + authentication) and Phase 2 (Tournament Core) are
+> implemented. Wallet, Payments, Referral, and Admin Dashboard business logic are
+> intentionally **not** implemented yet — the architecture is preserved so these plug in
+> cleanly in later phases.
+
+## Phase 2 — Tournament Core
+
+Adds the `tournaments` table and a full REST module under `/api/v1/tournaments`:
+
+- Full CRUD (create, update, get by id/slug, list, soft delete) with pagination, sorting,
+  and filtering (by game, status, visibility, featured flag, and text search).
+- Automatic, collision-safe slug generation (`app/utils/slug.py`).
+- Status machine covering Draft → Published → Registration Open → Registration Closed →
+  Live → Completed → Archived, plus Cancelled, with transitions validated centrally in
+  `app.models.tournament.TOURNAMENT_STATUS_TRANSITIONS`.
+- Banner/cover image upload to Supabase Storage (reuses the Phase 1 `StorageService`), with
+  content-type and size (5 MB) validation.
+- Authorization: any verified user can create a tournament (becoming its owner); only the
+  owner or an admin/super_admin can update, change status, delete, or upload assets.
+- Validation: date-window consistency, positive/non-negative numeric fields, max/current
+  player bounds, and duplicate-title-per-game checks — enforced in both the service layer
+  and as DB `CHECK`/`UNIQUE` constraints (`migrations/versions/0002_tournaments.py`).
 
 ---
 
@@ -117,7 +136,8 @@ pytest
 See `.env.example` for the full list (app, database, JWT, OTP, Supabase, Brevo, Firebase, CORS,
 rate limiting, logging).
 
-## 8. Explicitly Out of Scope (Phase 1)
+## 8. Explicitly Out of Scope (Phase 1 + 2)
 
-Tournament system, Wallet, Add/Withdraw Money, Referral, Admin Dashboard business features,
-Payment Gateway integration — architecture is preserved so these plug in cleanly later.
+Wallet, Add/Withdraw Money, Referral, Admin Dashboard business features, Payment Gateway
+integration, and tournament registration/bracket/match logic — architecture is preserved so
+these plug in cleanly later.

@@ -1,0 +1,121 @@
+"""
+Tournament Pydantic schemas.
+"""
+from datetime import datetime
+from decimal import Decimal
+from typing import Optional
+from uuid import UUID
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from app.models.tournament import TournamentStatus, TournamentVisibility
+
+
+class TournamentCreate(BaseModel):
+    title: str = Field(..., min_length=3, max_length=200)
+    description: Optional[str] = Field(None, max_length=5000)
+    game_id: UUID
+    mode_id: Optional[str] = Field(None, max_length=50)
+    map_id: Optional[str] = Field(None, max_length=50)
+    organizer: str = Field(..., min_length=2, max_length=150)
+    entry_fee: Decimal = Field(default=Decimal("0"), ge=0)
+    prize_pool: Decimal = Field(default=Decimal("0"), ge=0)
+    max_players: int = Field(..., gt=0, le=100000)
+    registration_start: datetime
+    registration_end: datetime
+    tournament_start: datetime
+    tournament_end: datetime
+    visibility: TournamentVisibility = TournamentVisibility.PUBLIC
+    is_featured: bool = False
+
+    @model_validator(mode="after")
+    def validate_windows(self) -> "TournamentCreate":
+        if self.registration_end <= self.registration_start:
+            raise ValueError("registration_end must be after registration_start")
+        if self.tournament_end <= self.tournament_start:
+            raise ValueError("tournament_end must be after tournament_start")
+        if self.tournament_start < self.registration_start:
+            raise ValueError("tournament_start cannot be before registration_start")
+        return self
+
+
+class TournamentUpdate(BaseModel):
+    title: Optional[str] = Field(None, min_length=3, max_length=200)
+    description: Optional[str] = Field(None, max_length=5000)
+    mode_id: Optional[str] = Field(None, max_length=50)
+    map_id: Optional[str] = Field(None, max_length=50)
+    organizer: Optional[str] = Field(None, min_length=2, max_length=150)
+    entry_fee: Optional[Decimal] = Field(None, ge=0)
+    prize_pool: Optional[Decimal] = Field(None, ge=0)
+    max_players: Optional[int] = Field(None, gt=0, le=100000)
+    registration_start: Optional[datetime] = None
+    registration_end: Optional[datetime] = None
+    tournament_start: Optional[datetime] = None
+    tournament_end: Optional[datetime] = None
+    visibility: Optional[TournamentVisibility] = None
+    is_featured: Optional[bool] = None
+
+
+class TournamentStatusUpdate(BaseModel):
+    status: TournamentStatus
+
+
+class TournamentRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    tournament_uid: str
+    title: str
+    slug: str
+    description: Optional[str] = None
+    game_id: UUID
+    mode_id: Optional[str] = None
+    map_id: Optional[str] = None
+    banner_url: Optional[str] = None
+    cover_url: Optional[str] = None
+    organizer: str
+    entry_fee: Decimal
+    prize_pool: Decimal
+    max_players: int
+    current_players: int
+    registration_start: datetime
+    registration_end: datetime
+    tournament_start: datetime
+    tournament_end: datetime
+    status: TournamentStatus
+    visibility: TournamentVisibility
+    is_featured: bool
+    created_by: Optional[UUID] = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class TournamentListItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    tournament_uid: str
+    title: str
+    slug: str
+    game_id: UUID
+    banner_url: Optional[str] = None
+    entry_fee: Decimal
+    prize_pool: Decimal
+    max_players: int
+    current_players: int
+    tournament_start: datetime
+    status: TournamentStatus
+    visibility: TournamentVisibility
+    is_featured: bool
+
+
+class PaginatedTournaments(BaseModel):
+    items: list[TournamentListItem]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+
+
+class TournamentAssetUploadResponse(BaseModel):
+    url: str
