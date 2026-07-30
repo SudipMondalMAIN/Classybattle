@@ -4,6 +4,7 @@ Participant model — Tournament Registration & Participants (Phase 5).
 import enum
 import uuid
 from datetime import datetime
+from decimal import Decimal
 from typing import Optional
 
 from sqlalchemy import (
@@ -120,7 +121,7 @@ class Participant(BaseModel):
         nullable=False,
     )
     payment_reference: Mapped[Optional[str]] = mapped_column(String(150), nullable=True)
-    entry_fee_paid: Mapped[float] = mapped_column(Numeric(10, 2), default=0, nullable=False)
+    entry_fee_paid: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=0, nullable=False)
 
     joined_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

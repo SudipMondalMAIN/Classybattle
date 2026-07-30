@@ -5,7 +5,7 @@ No game name is hardcoded; games are pure data.
 from typing import Optional
 
 from sqlalchemy import Boolean, String
-from sqlalchemy.dialects.postgresql import JSONB
+from app.database.types import PortableJSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.base import BaseModel
@@ -33,7 +33,7 @@ class Game(BaseModel):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     # Defines the shape of the per-game player profile (nickname, UID, Riot ID, etc.)
-    profile_schema: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)
+    profile_schema: Mapped[list] = mapped_column(PortableJSONB, default=list, nullable=False)
 
     game_profiles: Mapped[list["UserGameProfile"]] = relationship(
         back_populates="game", cascade="all, delete-orphan", lazy="selectin"

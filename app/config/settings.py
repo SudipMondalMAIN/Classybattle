@@ -3,7 +3,7 @@ Application configuration using Pydantic Settings.
 Loads and validates all environment variables in one place.
 """
 from functools import lru_cache
-from typing import List
+from typing import List, Optional
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -69,6 +69,14 @@ class Settings(BaseSettings):
     # ---------------- LOGGING ----------------
     LOG_LEVEL: str = "INFO"
 
+    # ---------------- API DOCUMENTATION ----------------
+    # Explicit override for exposing Swagger/Redoc/OpenAPI JSON. When left
+    # unset (None), documentation is enabled automatically in every
+    # environment except production. Set to true/false to force behaviour
+    # regardless of APP_ENV (e.g. to expose docs on a staging environment
+    # that has APP_ENV=production).
+    ENABLE_API_DOCS: Optional[bool] = None
+
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
     def parse_cors_origins(cls, v):
@@ -84,6 +92,18 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.APP_ENV.lower() == "production"
+
+    @property
+    def docs_enabled(self) -> bool:
+        """Whether Swagger/Redoc/OpenAPI JSON should be publicly exposed.
+
+        Controlled by ENABLE_API_DOCS when explicitly set; otherwise
+        defaults to "enabled everywhere except production" so that docs
+        never leak in a production deployment by accident.
+        """
+        if self.ENABLE_API_DOCS is not None:
+            return self.ENABLE_API_DOCS
+        return not self.is_production
 
 
 @lru_cache

@@ -3,7 +3,9 @@ Import every model here so Alembic's autogenerate can discover them
 via Base.metadata.
 """
 from app.database.base import Base
+from app.models.audit_log import AuditAction, AuditActorType, AuditLog
 from app.models.device_token import DeviceToken
+from app.models.idempotency_key import IdempotencyKey, IdempotencyKeyStatus
 from app.models.game import Game
 from app.models.game_mode import GameMode
 from app.models.game_profile import UserGameProfile
@@ -65,4 +67,9 @@ __all__ = [
     "MatchAssignmentType",
     "MatchCheckInStatus",
     "MATCH_CHECKIN_TRANSITIONS",
+    "AuditLog",
+    "AuditAction",
+    "AuditActorType",
+    "IdempotencyKey",
+    "IdempotencyKeyStatus",
 ]

@@ -7,7 +7,7 @@ from typing import Optional
 from uuid import UUID
 
 from sqlalchemy import Boolean, Enum, ForeignKey, String
-from sqlalchemy.dialects.postgresql import JSONB
+from app.database.types import PortableJSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -43,7 +43,7 @@ class Notification(BaseModel):
         nullable=False,
     )
     is_read: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    meta_data: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    meta_data: Mapped[Optional[dict]] = mapped_column(PortableJSONB, nullable=True)
 
     def __repr__(self) -> str:
         return f"<Notification id={self.id} user_id={self.user_id} channel={self.channel}>"

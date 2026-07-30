@@ -20,10 +20,14 @@ from app.models.tournament import (
     Tournament,
     TournamentStatus,
 )
+from app.models.audit_log import AuditAction
 from app.models.user import User, UserRole
+from app.repositories.game_mode_repository import GameModeRepository
 from app.repositories.game_repository import GameRepository
+from app.repositories.map_repository import MapRepository
 from app.repositories.tournament_repository import TournamentRepository
 from app.schemas.tournament import TournamentCreate, TournamentUpdate
+from app.services.audit_service import AuditService
 from app.storage.storage_service import StorageService
 from app.utils.slug import generate_unique_suffix, slugify
 
@@ -39,7 +43,10 @@ class TournamentService:
         self.session = session
         self.repo = TournamentRepository(session)
         self.game_repo = GameRepository(session)
+        self.game_mode_repo = GameModeRepository(session)
+        self.map_repo = MapRepository(session)
         self.storage = StorageService(bucket="tournament-assets")
+        self.audit = AuditService(session)
 
     # ------------------------------------------------------------------
     # Authorization helpers
@@ -78,6 +85,20 @@ class TournamentService:
         if game is None or not game.is_active:
             raise NotFoundException("Game not found or inactive")
 
+    async def _assert_mode_and_map_valid(
+        self, game_id: UUID, mode_id: Optional[UUID], map_id: Optional[UUID]
+    ) -> None:
+        if mode_id is not None:
+            mode = await self.game_mode_repo.get_by_id(mode_id)
+            if mode is None or mode.game_id != game_id:
+                raise ValidationException("mode_id does not belong to the selected game")
+        if map_id is not None:
+            map_ = await self.map_repo.get_by_id(map_id)
+            if map_ is None or map_.game_id != game_id:
+                raise ValidationException("map_id does not belong to the selected game")
+            if mode_id is not None and map_.mode_id is not None and map_.mode_id != mode_id:
+                raise ValidationException("map_id does not belong to the selected mode_id")
+
     @staticmethod
     def _assert_valid_status_transition(
         current: TournamentStatus, target: TournamentStatus
@@ -108,6 +129,7 @@ class TournamentService:
         self, payload: TournamentCreate, current_user: User
     ) -> Tournament:
         await self._assert_game_exists(payload.game_id)
+        await self._assert_mode_and_map_valid(payload.game_id, payload.mode_id, payload.map_id)
 
         if await self.repo.title_exists(payload.title, payload.game_id):
             raise ConflictException(
@@ -139,6 +161,22 @@ class TournamentService:
             max_teams=payload.max_teams,
             status=TournamentStatus.DRAFT,
             created_by=current_user.id,
+        )
+        await self.audit.record(
+            entity="tournament",
+            action=AuditAction.CREATE,
+            entity_id=tournament.id,
+            actor=current_user,
+            new_values={
+                "title": tournament.title,
+                "game_id": tournament.game_id,
+                "mode_id": tournament.mode_id,
+                "map_id": tournament.map_id,
+                "entry_fee": tournament.entry_fee,
+                "prize_pool": tournament.prize_pool,
+                "status": tournament.status,
+            },
+            description=f"Tournament '{tournament.title}' created",
         )
         await self.session.commit()
         return tournament
@@ -199,6 +237,11 @@ class TournamentService:
                 )
             update_data["slug"] = await self._generate_unique_slug(update_data["title"])
 
+        if "mode_id" in update_data or "map_id" in update_data:
+            new_mode_id = update_data.get("mode_id", tournament.mode_id)
+            new_map_id = update_data.get("map_id", tournament.map_id)
+            await self._assert_mode_and_map_valid(tournament.game_id, new_mode_id, new_map_id)
+
         reg_start = update_data.get("registration_start", tournament.registration_start)
         reg_end = update_data.get("registration_end", tournament.registration_end)
         t_start = update_data.get("tournament_start", tournament.tournament_start)
@@ -211,7 +254,17 @@ class TournamentService:
         if t_start < reg_start:
             raise ValidationException("tournament_start cannot be before registration_start")
 
+        old_values = {key: getattr(tournament, key) for key in update_data}
         tournament = await self.repo.update(tournament, **update_data)
+        await self.audit.record(
+            entity="tournament",
+            action=AuditAction.UPDATE,
+            entity_id=tournament.id,
+            actor=current_user,
+            old_values=old_values,
+            new_values=update_data,
+            description=f"Tournament '{tournament.title}' updated",
+        )
         await self.session.commit()
         return tournament
 
@@ -221,9 +274,19 @@ class TournamentService:
         tournament = await self.get_by_id(tournament_id)
         self._assert_can_manage(tournament, current_user)
 
-        self._assert_valid_status_transition(tournament.status, target_status)
+        old_status = tournament.status
+        self._assert_valid_status_transition(old_status, target_status)
 
         tournament = await self.repo.update(tournament, status=target_status)
+        await self.audit.record(
+            entity="tournament",
+            action=AuditAction.STATUS_CHANGE,
+            entity_id=tournament.id,
+            actor=current_user,
+            old_values={"status": old_status},
+            new_values={"status": target_status},
+            description=f"Tournament '{tournament.title}' status changed",
+        )
         await self.session.commit()
         return tournament
 

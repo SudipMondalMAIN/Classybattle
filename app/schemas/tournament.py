@@ -15,8 +15,8 @@ class TournamentCreate(BaseModel):
     title: str = Field(..., min_length=3, max_length=200)
     description: Optional[str] = Field(None, max_length=5000)
     game_id: UUID
-    mode_id: Optional[str] = Field(None, max_length=50)
-    map_id: Optional[str] = Field(None, max_length=50)
+    mode_id: Optional[UUID] = None
+    map_id: Optional[UUID] = None
     organizer: str = Field(..., min_length=2, max_length=150)
     entry_fee: Decimal = Field(default=Decimal("0"), ge=0)
     prize_pool: Decimal = Field(default=Decimal("0"), ge=0)
@@ -51,8 +51,8 @@ class TournamentCreate(BaseModel):
 class TournamentUpdate(BaseModel):
     title: Optional[str] = Field(None, min_length=3, max_length=200)
     description: Optional[str] = Field(None, max_length=5000)
-    mode_id: Optional[str] = Field(None, max_length=50)
-    map_id: Optional[str] = Field(None, max_length=50)
+    mode_id: Optional[UUID] = None
+    map_id: Optional[UUID] = None
     organizer: Optional[str] = Field(None, min_length=2, max_length=150)
     entry_fee: Optional[Decimal] = Field(None, ge=0)
     prize_pool: Optional[Decimal] = Field(None, ge=0)
@@ -83,8 +83,8 @@ class TournamentRead(BaseModel):
     slug: str
     description: Optional[str] = None
     game_id: UUID
-    mode_id: Optional[str] = None
-    map_id: Optional[str] = None
+    mode_id: Optional[UUID] = None
+    map_id: Optional[UUID] = None
     banner_url: Optional[str] = None
     cover_url: Optional[str] = None
     organizer: str

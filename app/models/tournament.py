@@ -4,6 +4,7 @@ Tournament model — core entity for the Tournament module (Phase 2).
 import enum
 import uuid
 from datetime import datetime
+from decimal import Decimal
 from typing import Optional
 
 from sqlalchemy import (
@@ -117,20 +118,30 @@ class Tournament(BaseModel):
         index=True,
     )
 
-    # No dedicated "mode"/"map" reference tables exist yet in the codebase,
-    # so these are kept as free-form identifiers (e.g. "solo", "duo",
-    # "squad", "bermuda"). They can be promoted to FK-backed lookup tables
-    # in a later phase without breaking this schema.
-    mode_id: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
-    map_id: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    # Phase 7.5: promoted from free-form String(50) identifiers to proper
+    # FK-backed references now that GameMode/Map lookup tables exist
+    # (Phases 3-4). ON DELETE SET NULL keeps a tournament intact even if
+    # its mode/map is later retired.
+    mode_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("game_modes.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    map_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("maps.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
 
     banner_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     cover_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
 
     organizer: Mapped[str] = mapped_column(String(150), nullable=False)
 
-    entry_fee: Mapped[float] = mapped_column(Numeric(10, 2), default=0, nullable=False)
-    prize_pool: Mapped[float] = mapped_column(Numeric(12, 2), default=0, nullable=False)
+    entry_fee: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=0, nullable=False)
+    prize_pool: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0, nullable=False)
 
     max_players: Mapped[int] = mapped_column(Integer, nullable=False)
     current_players: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
@@ -172,6 +183,8 @@ class Tournament(BaseModel):
     )
 
     game: Mapped["Game"] = relationship(lazy="selectin")  # noqa: F821
+    mode: Mapped[Optional["GameMode"]] = relationship(lazy="selectin")  # noqa: F821
+    map: Mapped[Optional["Map"]] = relationship(lazy="selectin")  # noqa: F821
     creator: Mapped[Optional["User"]] = relationship(lazy="selectin")  # noqa: F821
 
     def __repr__(self) -> str:

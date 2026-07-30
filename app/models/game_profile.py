@@ -9,7 +9,7 @@ from typing import Any
 from uuid import UUID
 
 from sqlalchemy import ForeignKey, UniqueConstraint
-from sqlalchemy.dialects.postgresql import JSONB
+from app.database.types import PortableJSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -30,7 +30,7 @@ class UserGameProfile(BaseModel):
     )
 
     # Arbitrary key/value data matching Game.profile_schema, e.g. {"nickname": "...", "uid": "..."}
-    data: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
+    data: Mapped[dict[str, Any]] = mapped_column(PortableJSONB, default=dict, nullable=False)
 
     user: Mapped["User"] = relationship(back_populates="game_profiles")
     game: Mapped["Game"] = relationship(back_populates="game_profiles")

@@ -29,13 +29,16 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
+    docs_enabled = settings.docs_enabled
+    logger.info("api_docs_configuration", enabled=docs_enabled, env=settings.APP_ENV)
+
     app = FastAPI(
         title=settings.APP_NAME,
         description="ClassyBattle eSports Tournament Platform API — Phases 1-7: Foundation, Auth, Tournament Core, Game Modes, Registration & Team System, Room Management & Match Lifecycle",
         version="1.0.0",
-        docs_url="/docs",
-        redoc_url="/redoc",
-        openapi_url="/openapi.json",
+        docs_url="/docs" if docs_enabled else None,
+        redoc_url="/redoc" if docs_enabled else None,
+        openapi_url="/openapi.json" if docs_enabled else None,
         lifespan=lifespan,
     )
 
