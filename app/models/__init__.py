@@ -5,6 +5,7 @@ via Base.metadata.
 from app.database.base import Base
 from app.models.device_token import DeviceToken
 from app.models.game import Game
+from app.models.game_mode import GameMode
 from app.models.game_profile import UserGameProfile
 from app.models.notification import Notification
 from app.models.otp import OTP
@@ -18,6 +19,7 @@ __all__ = [
     "OTP",
     "RefreshToken",
     "Game",
+    "GameMode",
     "UserGameProfile",
     "Notification",
     "DeviceToken",
