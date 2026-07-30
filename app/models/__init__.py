@@ -10,6 +10,12 @@ from app.models.game_profile import UserGameProfile
 from app.models.map import Map
 from app.models.notification import Notification
 from app.models.otp import OTP
+from app.models.participant import (
+    Participant,
+    ParticipantPaymentStatus,
+    ParticipantStatus,
+    RegistrationType,
+)
 from app.models.refresh_token import RefreshToken
 from app.models.tournament import Tournament, TournamentStatus, TournamentVisibility
 from app.models.user import User
@@ -28,4 +34,8 @@ __all__ = [
     "Tournament",
     "TournamentStatus",
     "TournamentVisibility",
+    "Participant",
+    "ParticipantStatus",
+    "ParticipantPaymentStatus",
+    "RegistrationType",
 ]
