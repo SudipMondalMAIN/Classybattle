@@ -8,7 +8,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from app.models.tournament import TournamentStatus, TournamentVisibility
+from app.models.tournament import TeamRegistrationMode, TournamentStatus, TournamentVisibility
 
 
 class TournamentCreate(BaseModel):
@@ -27,6 +27,9 @@ class TournamentCreate(BaseModel):
     tournament_end: datetime
     visibility: TournamentVisibility = TournamentVisibility.PUBLIC
     is_featured: bool = False
+    registration_mode: TeamRegistrationMode = TeamRegistrationMode.SOLO
+    team_size: int = Field(default=1, gt=0, le=100)
+    max_teams: Optional[int] = Field(None, gt=0)
 
     @model_validator(mode="after")
     def validate_windows(self) -> "TournamentCreate":
@@ -36,6 +39,12 @@ class TournamentCreate(BaseModel):
             raise ValueError("tournament_end must be after tournament_start")
         if self.tournament_start < self.registration_start:
             raise ValueError("tournament_start cannot be before registration_start")
+        if self.registration_mode == TeamRegistrationMode.SOLO and self.team_size != 1:
+            raise ValueError("team_size must be 1 when registration_mode is 'solo'")
+        if self.registration_mode != TeamRegistrationMode.SOLO and self.team_size < 2:
+            raise ValueError(
+                "team_size must be at least 2 for 'team_invite' or 'auto_random' modes"
+            )
         return self
 
 
@@ -54,6 +63,11 @@ class TournamentUpdate(BaseModel):
     tournament_end: Optional[datetime] = None
     visibility: Optional[TournamentVisibility] = None
     is_featured: Optional[bool] = None
+    max_teams: Optional[int] = Field(None, gt=0)
+    # registration_mode and team_size are intentionally NOT editable here once
+    # a tournament has any teams/participants attached — see
+    # TournamentService.update_tournament, which blocks changing them after
+    # registration has started to avoid corrupting existing teams.
 
 
 class TournamentStatusUpdate(BaseModel):
@@ -85,6 +99,9 @@ class TournamentRead(BaseModel):
     status: TournamentStatus
     visibility: TournamentVisibility
     is_featured: bool
+    registration_mode: TeamRegistrationMode
+    team_size: int
+    max_teams: Optional[int] = None
     created_by: Optional[UUID] = None
     created_at: datetime
     updated_at: datetime
@@ -107,6 +124,8 @@ class TournamentListItem(BaseModel):
     status: TournamentStatus
     visibility: TournamentVisibility
     is_featured: bool
+    registration_mode: TeamRegistrationMode
+    team_size: int
 
 
 class PaginatedTournaments(BaseModel):

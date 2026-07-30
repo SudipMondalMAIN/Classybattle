@@ -41,6 +41,14 @@ class TournamentVisibility(str, enum.Enum):
     UNLISTED = "unlisted"
 
 
+class TeamRegistrationMode(str, enum.Enum):
+    """How participants are grouped into teams for a tournament (Phase 6)."""
+
+    SOLO = "solo"
+    TEAM_INVITE = "team_invite"
+    AUTO_RANDOM = "auto_random"
+
+
 # Explicit allowed forward transitions. Kept as data (not scattered `if`
 # chains) so the service layer and any future admin UI can introspect it.
 TOURNAMENT_STATUS_TRANSITIONS: dict[TournamentStatus, set[TournamentStatus]] = {
@@ -82,6 +90,13 @@ class Tournament(BaseModel):
         CheckConstraint(
             "tournament_end > tournament_start",
             name="ck_tournaments_play_window_valid",
+        ),
+        CheckConstraint(
+            "team_size > 0", name="ck_tournaments_team_size_positive"
+        ),
+        CheckConstraint(
+            "max_teams IS NULL OR max_teams > 0",
+            name="ck_tournaments_max_teams_positive",
         ),
         Index("ix_tournaments_status_visibility", "status", "visibility"),
         Index("ix_tournaments_game_status", "game_id", "status"),
@@ -137,6 +152,17 @@ class Tournament(BaseModel):
         nullable=False,
     )
     is_featured: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    # ------------------------------------------------------------------
+    # Team registration settings (Phase 6).
+    # ------------------------------------------------------------------
+    registration_mode: Mapped[TeamRegistrationMode] = mapped_column(
+        Enum(TeamRegistrationMode, name="tournament_registration_mode"),
+        default=TeamRegistrationMode.SOLO,
+        nullable=False,
+    )
+    team_size: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    max_teams: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
     created_by: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),

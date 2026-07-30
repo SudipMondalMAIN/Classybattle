@@ -17,7 +17,14 @@ from app.models.participant import (
     RegistrationType,
 )
 from app.models.refresh_token import RefreshToken
-from app.models.tournament import Tournament, TournamentStatus, TournamentVisibility
+from app.models.team import Team, TeamStatus
+from app.models.team_member import TeamMember, TeamMemberRole
+from app.models.tournament import (
+    TeamRegistrationMode,
+    Tournament,
+    TournamentStatus,
+    TournamentVisibility,
+)
 from app.models.user import User
 
 __all__ = [
@@ -38,4 +45,9 @@ __all__ = [
     "ParticipantStatus",
     "ParticipantPaymentStatus",
     "RegistrationType",
+    "Team",
+    "TeamStatus",
+    "TeamMember",
+    "TeamMemberRole",
+    "TeamRegistrationMode",
 ]

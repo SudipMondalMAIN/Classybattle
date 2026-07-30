@@ -134,6 +134,9 @@ class TournamentService:
             tournament_end=payload.tournament_end,
             visibility=payload.visibility,
             is_featured=payload.is_featured,
+            registration_mode=payload.registration_mode,
+            team_size=payload.team_size,
+            max_teams=payload.max_teams,
             status=TournamentStatus.DRAFT,
             created_by=current_user.id,
         )
