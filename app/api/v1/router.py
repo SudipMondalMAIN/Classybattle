@@ -9,6 +9,7 @@ from app.api.v1.game_routes import router as game_router
 from app.api.v1.health_routes import router as health_router
 from app.api.v1.map_routes import router as map_router
 from app.api.v1.match_result_routes import router as match_result_router
+from app.api.v1.live_match_routes import router as live_match_router
 from app.api.v1.match_routes import router as match_router
 from app.api.v1.participant_routes import router as participant_router
 from app.api.v1.prize_routes import router as prize_router
@@ -31,3 +32,4 @@ api_v1_router.include_router(prize_router)
 api_v1_router.include_router(team_router)
 api_v1_router.include_router(match_router)
 api_v1_router.include_router(match_result_router)
+api_v1_router.include_router(live_match_router)

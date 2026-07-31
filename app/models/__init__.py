@@ -23,6 +23,16 @@ from app.models.match_result import (
     MatchResultStatus,
 )
 from app.models.match_winner import MatchWinner, WinnerAssignmentSource
+from app.models.live_match import (
+    LIVE_MATCH_STATUS_TRANSITIONS,
+    LiveMatch,
+    LiveMatchEvent,
+    LiveMatchEventType,
+    LiveMatchScore,
+    LiveMatchStatus,
+    LiveTournamentState,
+    LiveTournamentStatus,
+)
 from app.models.notification import Notification
 from app.models.otp import OTP
 from app.models.participant import (
@@ -107,4 +117,12 @@ __all__ = [
     "MATCH_RESULT_STATUS_TRANSITIONS",
     "MatchWinner",
     "WinnerAssignmentSource",
+    "LiveMatch",
+    "LiveMatchStatus",
+    "LIVE_MATCH_STATUS_TRANSITIONS",
+    "LiveMatchEvent",
+    "LiveMatchEventType",
+    "LiveMatchScore",
+    "LiveTournamentState",
+    "LiveTournamentStatus",
 ]
