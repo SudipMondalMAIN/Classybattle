@@ -17,6 +17,12 @@ from app.models.match_participant import (
     MatchCheckInStatus,
     MatchParticipant,
 )
+from app.models.match_result import (
+    MATCH_RESULT_STATUS_TRANSITIONS,
+    MatchResult,
+    MatchResultStatus,
+)
+from app.models.match_winner import MatchWinner, WinnerAssignmentSource
 from app.models.notification import Notification
 from app.models.otp import OTP
 from app.models.participant import (
@@ -96,4 +102,9 @@ __all__ = [
     "PRIZE_POOL_STATUS_TRANSITIONS",
     "PrizePayout",
     "PrizePayoutStatus",
+    "MatchResult",
+    "MatchResultStatus",
+    "MATCH_RESULT_STATUS_TRANSITIONS",
+    "MatchWinner",
+    "WinnerAssignmentSource",
 ]
