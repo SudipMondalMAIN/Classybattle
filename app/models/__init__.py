@@ -25,6 +25,14 @@ from app.models.participant import (
     ParticipantStatus,
     RegistrationType,
 )
+from app.models.prize import (
+    PRIZE_POOL_STATUS_TRANSITIONS,
+    PrizeDistributionType,
+    PrizePayout,
+    PrizePayoutStatus,
+    PrizePool,
+    PrizePoolStatus,
+)
 from app.models.refresh_token import RefreshToken
 from app.models.team import Team, TeamStatus
 from app.models.team_member import TeamMember, TeamMemberRole
@@ -82,4 +90,10 @@ __all__ = [
     "WalletTransaction",
     "WalletTransactionType",
     "WalletTransactionStatus",
+    "PrizePool",
+    "PrizePoolStatus",
+    "PrizeDistributionType",
+    "PRIZE_POOL_STATUS_TRANSITIONS",
+    "PrizePayout",
+    "PrizePayoutStatus",
 ]
