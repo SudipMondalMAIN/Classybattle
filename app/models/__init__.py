@@ -35,6 +35,12 @@ from app.models.tournament import (
     TournamentVisibility,
 )
 from app.models.user import User
+from app.models.wallet import Wallet
+from app.models.wallet_transaction import (
+    WalletTransaction,
+    WalletTransactionStatus,
+    WalletTransactionType,
+)
 
 __all__ = [
     "Base",
@@ -72,4 +78,8 @@ __all__ = [
     "AuditActorType",
     "IdempotencyKey",
     "IdempotencyKeyStatus",
+    "Wallet",
+    "WalletTransaction",
+    "WalletTransactionType",
+    "WalletTransactionStatus",
 ]

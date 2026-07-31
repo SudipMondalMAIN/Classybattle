@@ -13,11 +13,13 @@ from app.api.v1.participant_routes import router as participant_router
 from app.api.v1.team_routes import router as team_router
 from app.api.v1.tournament_routes import router as tournament_router
 from app.api.v1.user_routes import router as user_router
+from app.api.v1.wallet_routes import router as wallet_router
 
 api_v1_router = APIRouter()
 api_v1_router.include_router(health_router)
 api_v1_router.include_router(auth_router)
 api_v1_router.include_router(user_router)
+api_v1_router.include_router(wallet_router)
 api_v1_router.include_router(game_router)
 api_v1_router.include_router(game_mode_router)
 api_v1_router.include_router(map_router)
