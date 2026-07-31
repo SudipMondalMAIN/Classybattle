@@ -1,11 +1,13 @@
 """
-Tournament Registration & Participants API routes (Phase 5).
+Tournament Registration & Participants API routes (Phase 5, extended in
+Phase 9 with Wallet-backed entry fee payment + idempotent registration).
 """
 import math
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Header, Query
+from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_db_session
@@ -21,6 +23,7 @@ from app.schemas.participant import (
     ParticipantRegister,
     ParticipantStatusUpdate,
 )
+from app.services.idempotency_service import IdempotencyService
 from app.services.participant_service import ParticipantService
 
 router = APIRouter(tags=["Tournament Registration"])
@@ -37,12 +40,40 @@ router = APIRouter(tags=["Tournament Registration"])
 async def register_for_tournament(
     tournament_id: UUID,
     payload: ParticipantRegister,
+    idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
     current_user: User = Depends(get_current_active_verified_user),
     session: AsyncSession = Depends(get_db_session),
 ):
     service = ParticipantService(session)
-    participant = await service.register(tournament_id, payload, current_user)
-    return ParticipantRead.model_validate(participant)
+
+    if not idempotency_key:
+        participant = await service.register(tournament_id, payload, current_user)
+        return ParticipantRead.model_validate(participant)
+
+    # Idempotent registration: a client retrying the same request (e.g.
+    # after a network timeout) with the same Idempotency-Key gets back the
+    # original result instead of double-registering / double-charging.
+    idempotency_service = IdempotencyService(session)
+    async with idempotency_service.begin(
+        scope="tournament.register",
+        key=idempotency_key,
+        user_id=current_user.id,
+        payload={
+            "tournament_id": str(tournament_id),
+            **payload.model_dump(mode="json"),
+        },
+    ) as guard:
+        if guard.replayed:
+            return JSONResponse(
+                status_code=guard.response_status_code, content=guard.response_body
+            )
+
+        participant = await service.register(tournament_id, payload, current_user)
+        result = ParticipantRead.model_validate(participant)
+        body = result.model_dump(mode="json")
+        await guard.complete(status_code=201, body=body)
+        await session.commit()
+        return result
 
 
 @router.post(

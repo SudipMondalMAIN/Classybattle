@@ -93,6 +93,27 @@ class ParticipantRepository(BaseRepository[Participant]):
         result = await self.session.execute(stmt)
         return result.scalars().all(), total
 
+    async def list_active_for_tournament_all(
+        self, tournament_id: UUID
+    ) -> Sequence[Participant]:
+        """Returns every capacity-occupying participant for a tournament,
+        unpaginated. Used for bulk operations (e.g. refunding everyone when
+        a tournament is cancelled) where we must touch every row, not just
+        one page of them."""
+        stmt = select(Participant).where(
+            Participant.tournament_id == tournament_id,
+            Participant.deleted_at.is_(None),
+            Participant.status.in_(
+                [
+                    ParticipantStatus.PENDING,
+                    ParticipantStatus.CONFIRMED,
+                    ParticipantStatus.CHECKED_IN,
+                ]
+            ),
+        )
+        result = await self.session.execute(stmt)
+        return result.scalars().all()
+
     async def list_for_user(
         self,
         user_id: UUID,

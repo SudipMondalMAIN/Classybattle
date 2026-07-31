@@ -288,6 +288,19 @@ class TournamentService:
             description=f"Tournament '{tournament.title}' status changed",
         )
         await self.session.commit()
+
+        if target_status == TournamentStatus.CANCELLED:
+            # Phase 9: cancelling a tournament cancels every active
+            # registration and refunds any entry fee already paid via the
+            # Wallet module. Local import avoids a circular import between
+            # TournamentService and ParticipantService.
+            from app.services.participant_service import ParticipantService
+
+            participant_service = ParticipantService(self.session)
+            await participant_service.cancel_all_for_tournament_cancellation(
+                tournament, current_user
+            )
+
         return tournament
 
     async def soft_delete_tournament(self, tournament_id: UUID, current_user: User) -> None:
