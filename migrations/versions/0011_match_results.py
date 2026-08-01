@@ -19,10 +19,10 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     match_result_status = postgresql.ENUM(
-        "submitted", "verified", "approved", "rejected", name="match_result_status"
+        "submitted", "verified", "approved", "rejected", name="match_result_status", create_type=False
     )
     winner_assignment_source = postgresql.ENUM(
-        "automatic", "manual", name="winner_assignment_source"
+        "automatic", "manual", name="winner_assignment_source", create_type=False
     )
     bind = op.get_bind()
     match_result_status.create(bind, checkfirst=True)

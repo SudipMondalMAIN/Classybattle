@@ -35,6 +35,7 @@ def upgrade() -> None:
     match_room_status = postgresql.ENUM(
         "not_created", "hidden", "published", "edited", "closed",
         name="match_room_status",
+        create_type=False,
     )
     match_room_status.create(bind, checkfirst=True)
 
@@ -42,6 +43,7 @@ def upgrade() -> None:
         "draft", "scheduled", "room_published", "check_in_open", "ready",
         "live", "completed", "cancelled",
         name="match_status",
+        create_type=False,
     )
     match_status.create(bind, checkfirst=True)
 
@@ -115,13 +117,14 @@ def upgrade() -> None:
     # match_participants
     # ------------------------------------------------------------------
     match_assignment_type = postgresql.ENUM(
-        "registered", "random", "manual", "auto", name="match_assignment_type"
+        "registered", "random", "manual", "auto", name="match_assignment_type", create_type=False
     )
     match_assignment_type.create(bind, checkfirst=True)
 
     match_check_in_status = postgresql.ENUM(
         "not_open", "pending", "checked_in", "late_checked_in", "no_show",
         name="match_check_in_status",
+        create_type=False,
     )
     match_check_in_status.create(bind, checkfirst=True)
 

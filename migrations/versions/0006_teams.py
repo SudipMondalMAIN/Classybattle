@@ -33,7 +33,7 @@ def upgrade() -> None:
     # Tournament: team registration settings
     # ------------------------------------------------------------------
     registration_mode = postgresql.ENUM(
-        "solo", "team_invite", "auto_random", name="tournament_registration_mode"
+        "solo", "team_invite", "auto_random", name="tournament_registration_mode", create_type=False
     )
     registration_mode.create(bind, checkfirst=True)
 
@@ -66,7 +66,7 @@ def upgrade() -> None:
     # ------------------------------------------------------------------
     # teams
     # ------------------------------------------------------------------
-    team_status = postgresql.ENUM("forming", "locked", "disbanded", name="team_status")
+    team_status = postgresql.ENUM("forming", "locked", "disbanded", name="team_status", create_type=False)
     team_status.create(bind, checkfirst=True)
 
     op.create_table(
@@ -111,7 +111,7 @@ def upgrade() -> None:
     # ------------------------------------------------------------------
     # team_members
     # ------------------------------------------------------------------
-    team_member_role = postgresql.ENUM("captain", "member", name="team_member_role")
+    team_member_role = postgresql.ENUM("captain", "member", name="team_member_role", create_type=False)
     team_member_role.create(bind, checkfirst=True)
 
     op.create_table(

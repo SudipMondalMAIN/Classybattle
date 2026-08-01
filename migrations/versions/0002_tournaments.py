@@ -37,9 +37,10 @@ def upgrade() -> None:
         "archived",
         "cancelled",
         name="tournament_status",
+        create_type=False,
     )
     tournament_visibility = postgresql.ENUM(
-        "public", "private", "unlisted", name="tournament_visibility"
+        "public", "private", "unlisted", name="tournament_visibility", create_type=False
     )
 
     bind = op.get_bind()

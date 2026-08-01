@@ -28,7 +28,7 @@ def _base_columns():
 
 def upgrade() -> None:
     live_match_status = postgresql.ENUM(
-        "not_started", "live", "paused", "ended", "cancelled", name="live_match_status"
+        "not_started", "live", "paused", "ended", "cancelled", name="live_match_status", create_type=False
     )
     live_match_event_type = postgresql.ENUM(
         "match_started",
@@ -45,9 +45,10 @@ def upgrade() -> None:
         "announcement",
         "other",
         name="live_match_event_type",
+        create_type=False,
     )
     live_tournament_status = postgresql.ENUM(
-        "not_started", "live", "completed", "cancelled", name="live_tournament_status"
+        "not_started", "live", "completed", "cancelled", name="live_tournament_status", create_type=False
     )
 
     bind = op.get_bind()

@@ -28,15 +28,17 @@ def _base_columns():
 
 def upgrade() -> None:
     registration_type = postgresql.ENUM(
-        "solo", "duo", "squad", "team", name="participant_registration_type"
+        "solo", "duo", "squad", "team", name="participant_registration_type", create_type=False
     )
     participant_status = postgresql.ENUM(
         "pending", "confirmed", "cancelled", "rejected", "checked_in",
         name="participant_status",
+        create_type=False,
     )
     participant_payment_status = postgresql.ENUM(
         "not_required", "pending", "paid", "failed", "refunded",
         name="participant_payment_status",
+        create_type=False,
     )
 
     bind = op.get_bind()
