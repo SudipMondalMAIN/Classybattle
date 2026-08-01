@@ -33,7 +33,13 @@ from app.models.live_match import (
     LiveTournamentState,
     LiveTournamentStatus,
 )
-from app.models.notification import Notification
+from app.models.notification import (
+    Notification,
+    NotificationChannel,
+    NotificationEventType,
+    NotificationPreference,
+    NotificationStatus,
+)
 from app.models.otp import OTP
 from app.models.participant import (
     Participant,
@@ -76,6 +82,10 @@ __all__ = [
     "UserGameProfile",
     "Map",
     "Notification",
+    "NotificationChannel",
+    "NotificationStatus",
+    "NotificationEventType",
+    "NotificationPreference",
     "DeviceToken",
     "Tournament",
     "TournamentStatus",

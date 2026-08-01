@@ -247,6 +247,20 @@ class WalletService:
         )
         if commit:
             await self.session.commit()
+            try:
+                from app.models.notification import NotificationEventType
+                from app.notifications.dispatch_service import NotificationDispatchService
+
+                await NotificationDispatchService(self.session).dispatch(
+                    user=user,
+                    event_type=NotificationEventType.WALLET_CREDITED,
+                    title="Wallet credited",
+                    body=f"₹{amount} has been credited to your wallet."
+                    + (f" ({description})" if description else ""),
+                    event_key=f"wallet_credited:{txn.id}",
+                )
+            except Exception:  # noqa: BLE001
+                pass
         return txn
 
     async def debit(
@@ -274,6 +288,20 @@ class WalletService:
         )
         if commit:
             await self.session.commit()
+            try:
+                from app.models.notification import NotificationEventType
+                from app.notifications.dispatch_service import NotificationDispatchService
+
+                await NotificationDispatchService(self.session).dispatch(
+                    user=user,
+                    event_type=NotificationEventType.WALLET_DEBITED,
+                    title="Wallet debited",
+                    body=f"₹{amount} has been debited from your wallet."
+                    + (f" ({description})" if description else ""),
+                    event_key=f"wallet_debited:{txn.id}",
+                )
+            except Exception:  # noqa: BLE001
+                pass
         return txn
 
     async def hold(
@@ -393,6 +421,20 @@ class WalletService:
         )
         if commit:
             await self.session.commit()
+            try:
+                from app.models.notification import NotificationEventType
+                from app.notifications.dispatch_service import NotificationDispatchService
+
+                await NotificationDispatchService(self.session).dispatch(
+                    user=user,
+                    event_type=NotificationEventType.REFUND_COMPLETED,
+                    title="Refund completed",
+                    body=f"₹{amount} has been refunded to your wallet."
+                    + (f" ({description})" if description else ""),
+                    event_key=f"refund_completed:{txn.id}",
+                )
+            except Exception:  # noqa: BLE001
+                pass
         return txn
 
     async def bonus(

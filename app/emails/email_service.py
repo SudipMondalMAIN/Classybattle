@@ -62,5 +62,19 @@ class EmailService:
         html = password_reset_otp_template(full_name=full_name, otp=otp, expiry_minutes=expiry_minutes)
         await self._send(to_email, "Reset your ClassyBattle password", html)
 
+    async def send_notification_email(self, to_email: str, subject: str, body: str) -> None:
+        html = f"""
+        <html>
+          <body style="font-family: Arial, sans-serif; background-color: #0d0d0d; padding: 24px;">
+            <div style="max-width: 480px; margin: 0 auto; background: #1a1a1a; border-radius: 12px; padding: 32px; color: #f5f5f5;">
+              <h2 style="color: #ffcc00; margin-top: 0;">{subject}</h2>
+              <p>{body}</p>
+              <p style="margin-top: 32px; font-size: 12px; color: #888;">— The ClassyBattle Team</p>
+            </div>
+          </body>
+        </html>
+        """
+        await self._send(to_email, subject, html)
+
 
 email_service = EmailService()

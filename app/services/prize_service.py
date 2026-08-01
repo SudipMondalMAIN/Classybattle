@@ -447,6 +447,21 @@ class PrizeService:
         payout.failure_reason = None
         payout.performed_by = admin.id if admin is not None else None
         await self.session.flush()
+
+        try:
+            from app.models.notification import NotificationEventType
+            from app.notifications.dispatch_service import NotificationDispatchService
+
+            await NotificationDispatchService(self.session).dispatch(
+                user=user,
+                event_type=NotificationEventType.PRIZE_DISTRIBUTED,
+                title="Prize distributed",
+                body=f"Your prize of ₹{payout.amount} for rank {payout.rank} has been credited to your wallet.",
+                event_key=f"prize_distributed:{payout.id}",
+            )
+        except Exception:  # noqa: BLE001
+            pass
+
         return payout
 
     # ------------------------------------------------------------------

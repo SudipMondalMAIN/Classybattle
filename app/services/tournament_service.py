@@ -25,6 +25,7 @@ from app.models.user import User, UserRole
 from app.repositories.game_mode_repository import GameModeRepository
 from app.repositories.game_repository import GameRepository
 from app.repositories.map_repository import MapRepository
+from app.repositories.participant_repository import ParticipantRepository
 from app.repositories.tournament_repository import TournamentRepository
 from app.schemas.tournament import TournamentCreate, TournamentUpdate
 from app.services.audit_service import AuditService
@@ -47,6 +48,27 @@ class TournamentService:
         self.map_repo = MapRepository(session)
         self.storage = StorageService(bucket="tournament-assets")
         self.audit = AuditService(session)
+        self.participant_repo = ParticipantRepository(session)
+
+    async def _notify_participants(
+        self, tournament: Tournament, *, event_type, title: str, body: str, event_key_prefix: str
+    ) -> None:
+        try:
+            from app.notifications.dispatch_service import NotificationDispatchService
+
+            participants = await self.participant_repo.list_active_for_tournament_all(tournament.id)
+            users = [p.user for p in participants if p.user is not None]
+            if not users:
+                return
+            await NotificationDispatchService(self.session).dispatch_bulk(
+                users=users,
+                event_type=event_type,
+                title=title,
+                body=body,
+                event_key_prefix=event_key_prefix,
+            )
+        except Exception:  # noqa: BLE001 - notifications must never break tournament flows
+            pass
 
     # ------------------------------------------------------------------
     # Authorization helpers
@@ -179,6 +201,21 @@ class TournamentService:
             description=f"Tournament '{tournament.title}' created",
         )
         await self.session.commit()
+
+        try:
+            from app.models.notification import NotificationEventType
+            from app.notifications.dispatch_service import NotificationDispatchService
+
+            await NotificationDispatchService(self.session).dispatch(
+                user=current_user,
+                event_type=NotificationEventType.TOURNAMENT_CREATED,
+                title="Tournament created",
+                body=f"Your tournament '{tournament.title}' has been created successfully.",
+                event_key=f"tournament_created:{tournament.id}",
+            )
+        except Exception:  # noqa: BLE001
+            pass
+
         return tournament
 
     async def get_by_id(self, tournament_id: UUID, include_deleted: bool = False) -> Tournament:
@@ -266,6 +303,17 @@ class TournamentService:
             description=f"Tournament '{tournament.title}' updated",
         )
         await self.session.commit()
+
+        from app.models.notification import NotificationEventType
+
+        await self._notify_participants(
+            tournament,
+            event_type=NotificationEventType.TOURNAMENT_UPDATED,
+            title="Tournament updated",
+            body=f"Tournament '{tournament.title}' has been updated. Please review the latest details.",
+            event_key_prefix=f"tournament_updated:{tournament.id}:{tournament.updated_at.isoformat()}",
+        )
+
         return tournament
 
     async def update_status(
@@ -290,6 +338,16 @@ class TournamentService:
         await self.session.commit()
 
         if target_status == TournamentStatus.CANCELLED:
+            from app.models.notification import NotificationEventType
+
+            await self._notify_participants(
+                tournament,
+                event_type=NotificationEventType.TOURNAMENT_CANCELLED,
+                title="Tournament cancelled",
+                body=f"Tournament '{tournament.title}' has been cancelled. Any paid entry fees will be refunded.",
+                event_key_prefix=f"tournament_cancelled:{tournament.id}",
+            )
+
             # Phase 9: cancelling a tournament cancels every active
             # registration and refunds any entry fee already paid via the
             # Wallet module. Local import avoids a circular import between

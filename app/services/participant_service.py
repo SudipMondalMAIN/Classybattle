@@ -341,11 +341,22 @@ class ParticipantService:
 
         await self.session.commit()
         await self.session.refresh(participant)
-        return participant
 
-    # ------------------------------------------------------------------
-    # Cancel / Leave
-    # ------------------------------------------------------------------
+        try:
+            from app.models.notification import NotificationEventType
+            from app.notifications.dispatch_service import NotificationDispatchService
+
+            await NotificationDispatchService(self.session).dispatch(
+                user=current_user,
+                event_type=NotificationEventType.REGISTRATION_SUCCESSFUL,
+                title="Registration successful",
+                body=f"You're registered for '{tournament.title}'. Good luck!",
+                event_key=f"registration_successful:{participant.id}:{participant.joined_at.isoformat()}",
+            )
+        except Exception:  # noqa: BLE001
+            pass
+
+        return participant
     async def cancel_registration(
         self, tournament_id: UUID, current_user: User
     ) -> Participant:
@@ -408,6 +419,22 @@ class ParticipantService:
 
         await self.session.commit()
         await self.session.refresh(participant)
+
+        try:
+            from app.models.notification import NotificationEventType
+            from app.notifications.dispatch_service import NotificationDispatchService
+
+            await NotificationDispatchService(self.session).dispatch(
+                user=participant.user,
+                event_type=NotificationEventType.REGISTRATION_CANCELLED,
+                title="Registration cancelled",
+                body=f"Your registration for '{tournament.title}' has been cancelled."
+                + (" Your entry fee was refunded." if was_paid else ""),
+                event_key=f"registration_cancelled:{participant.id}:{participant.cancelled_at.isoformat()}",
+            )
+        except Exception:  # noqa: BLE001
+            pass
+
         return participant
 
     # ------------------------------------------------------------------

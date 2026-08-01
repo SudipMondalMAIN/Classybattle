@@ -159,6 +159,27 @@ class MatchService:
         )
         await self.session.commit()
         await self.session.refresh(match)
+
+        try:
+            from app.models.notification import NotificationEventType
+            from app.notifications.dispatch_service import NotificationDispatchService
+            from app.repositories.participant_repository import ParticipantRepository
+
+            participants = await ParticipantRepository(self.session).list_active_for_tournament_all(
+                tournament.id
+            )
+            users = [p.user for p in participants if p.user is not None]
+            if users:
+                await NotificationDispatchService(self.session).dispatch_bulk(
+                    users=users,
+                    event_type=NotificationEventType.MATCH_CREATED,
+                    title="New match scheduled",
+                    body=f"Match {match.match_number} (round {match.round_number}) has been scheduled for '{tournament.title}'.",
+                    event_key_prefix=f"match_created:{match.id}",
+                )
+        except Exception:  # noqa: BLE001
+            pass
+
         return match
 
     async def update_match(
@@ -327,6 +348,39 @@ class MatchService:
         match = await self.repo.update(match, **update_fields)
         await self.session.commit()
         await self.session.refresh(match)
+
+        if target_status in (MatchStatus.LIVE, MatchStatus.COMPLETED):
+            try:
+                from app.models.notification import NotificationEventType
+                from app.notifications.dispatch_service import NotificationDispatchService
+                from app.repositories.participant_repository import ParticipantRepository
+
+                event_type = (
+                    NotificationEventType.MATCH_STARTED
+                    if target_status == MatchStatus.LIVE
+                    else NotificationEventType.MATCH_COMPLETED
+                )
+                title = "Match started" if target_status == MatchStatus.LIVE else "Match completed"
+                body = (
+                    f"Match {match.match_number} (round {match.round_number}) has started."
+                    if target_status == MatchStatus.LIVE
+                    else f"Match {match.match_number} (round {match.round_number}) has finished."
+                )
+                participants = await ParticipantRepository(
+                    self.session
+                ).list_active_for_tournament_all(tournament.id)
+                users = [p.user for p in participants if p.user is not None]
+                if users:
+                    await NotificationDispatchService(self.session).dispatch_bulk(
+                        users=users,
+                        event_type=event_type,
+                        title=title,
+                        body=body,
+                        event_key_prefix=f"{event_type.value}:{match.id}",
+                    )
+            except Exception:  # noqa: BLE001
+                pass
+
         return match
 
     async def update_match_result(

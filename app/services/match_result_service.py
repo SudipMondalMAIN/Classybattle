@@ -103,6 +103,31 @@ class MatchResultService:
             "You do not have permission to manage match results for this tournament"
         )
 
+    async def _notify_winners(self, winners: list) -> None:
+        try:
+            from app.models.notification import NotificationEventType
+            from app.notifications.dispatch_service import NotificationDispatchService
+
+            dispatch = NotificationDispatchService(self.session)
+            for winner in winners:
+                participant_id = winner.participant_id
+                if participant_id is None and winner.team_id is not None:
+                    participant_id = await self._resolve_captain_participant_id(winner.team_id)
+                if participant_id is None:
+                    continue
+                participant = await self.participant_repo.get_by_id(participant_id)
+                if participant is None or participant.user is None:
+                    continue
+                await dispatch.dispatch(
+                    user=participant.user,
+                    event_type=NotificationEventType.WINNER_DECLARED,
+                    title="You won!",
+                    body=f"Congratulations! You placed rank {winner.rank} in your match.",
+                    event_key=f"winner_declared:{winner.id}",
+                )
+        except Exception:  # noqa: BLE001 - notifications must never break result flows
+            pass
+
     async def _slot_belongs_to_user(self, match_id: UUID, user: User) -> bool:
         slots = await self.slot_repo.list_for_match(match_id)
         for slot in slots:
@@ -461,6 +486,9 @@ class MatchResultService:
         await self.session.commit()
         for w in created:
             await self.session.refresh(w)
+
+        await self._notify_winners(created)
+
         return created
 
     async def declare_winners(
@@ -546,6 +574,9 @@ class MatchResultService:
         await self.session.commit()
         for w in created:
             await self.session.refresh(w)
+
+        await self._notify_winners(created)
+
         return created
 
     async def list_match_winners(self, match_id: UUID) -> list[MatchWinner]:
@@ -589,6 +620,26 @@ class MatchResultService:
         )
         await self.session.commit()
         await self.session.refresh(result)
+
+        try:
+            from app.models.notification import NotificationEventType
+            from app.notifications.dispatch_service import NotificationDispatchService
+            from app.repositories.participant_repository import ParticipantRepository
+
+            participants = await ParticipantRepository(self.session).list_active_for_tournament_all(
+                tournament.id
+            )
+            users = [p.user for p in participants if p.user is not None]
+            if users:
+                await NotificationDispatchService(self.session).dispatch_bulk(
+                    users=users,
+                    event_type=NotificationEventType.MATCH_RESULT_APPROVED,
+                    title="Match result approved",
+                    body=f"The result for match {match.match_number} in '{tournament.title}' has been approved.",
+                    event_key_prefix=f"match_result_approved:{result.id}",
+                )
+        except Exception:  # noqa: BLE001
+            pass
 
         await self._trigger_prize_distribution(match, result, current_user)
 

@@ -207,6 +207,27 @@ class LiveMatchService:
         await self.live_tournament_service.sync_tournament_progress(tournament.id)
         await self.session.commit()
         await self.session.refresh(live)
+
+        try:
+            from app.models.notification import NotificationEventType
+            from app.notifications.dispatch_service import NotificationDispatchService
+            from app.repositories.participant_repository import ParticipantRepository
+
+            participants = await ParticipantRepository(self.session).list_active_for_tournament_all(
+                tournament.id
+            )
+            users = [p.user for p in participants if p.user is not None]
+            if users:
+                await NotificationDispatchService(self.session).dispatch_bulk(
+                    users=users,
+                    event_type=NotificationEventType.LIVE_MATCH_STARTED,
+                    title="Live match started",
+                    body=f"The live match for '{tournament.title}' (round {match.round_number}) has started. Join now!",
+                    event_key_prefix=f"live_match_started:{live.id}",
+                )
+        except Exception:  # noqa: BLE001
+            pass
+
         return live
 
     async def pause_match(self, match_id: UUID, current_user: User, reason: Optional[str] = None) -> LiveMatch:

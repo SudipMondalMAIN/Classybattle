@@ -105,6 +105,21 @@ class AuthService:
         await self.session.commit()
 
         logger.info("user_signup_completed", user_id=str(user.id))
+
+        try:
+            from app.models.notification import NotificationEventType
+            from app.notifications.dispatch_service import NotificationDispatchService
+
+            await NotificationDispatchService(self.session).dispatch(
+                user=user,
+                event_type=NotificationEventType.USER_REGISTRATION,
+                title="Welcome to ClassyBattle!",
+                body=f"Hi {user.full_name}, your account has been verified successfully.",
+                event_key=f"user_registration:{user.id}",
+            )
+        except Exception as exc:  # noqa: BLE001 - notifications must never break auth
+            logger.warning("registration_notification_failed", user_id=str(user.id), error=str(exc))
+
         return user, access_token, refresh_token
 
     async def resend_otp(self, email: str, purpose: OTPPurpose) -> None:
