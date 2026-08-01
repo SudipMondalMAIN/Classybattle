@@ -86,6 +86,19 @@ from app.models.prize import (
     PrizePoolStatus,
 )
 from app.models.refresh_token import RefreshToken
+from app.models.security import (
+    AccountLock,
+    AnalyticsMetricType,
+    AnalyticsPeriodType,
+    AnalyticsSnapshot,
+    FraudFlag,
+    FraudFlagStatus,
+    FraudFlagType,
+    LoginHistory,
+    SecurityEvent,
+    SecurityEventSeverity,
+    SecurityEventType,
+)
 from app.models.social import (
     ActivityFeedEntry,
     ActivityType,
@@ -223,4 +236,15 @@ __all__ = [
     "ReportReason",
     "ReportStatus",
     "ReportTargetType",
+    "LoginHistory",
+    "SecurityEvent",
+    "SecurityEventType",
+    "SecurityEventSeverity",
+    "AccountLock",
+    "FraudFlag",
+    "FraudFlagType",
+    "FraudFlagStatus",
+    "AnalyticsSnapshot",
+    "AnalyticsMetricType",
+    "AnalyticsPeriodType",
 ]

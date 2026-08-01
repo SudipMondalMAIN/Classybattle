@@ -26,10 +26,12 @@ from app.core.security import (
 from app.emails.email_service import email_service
 from app.models.otp import OTPPurpose
 from app.models.user import User, UserRole
+from app.core.request_context import get_client_ip
 from app.repositories.refresh_token_repository import RefreshTokenRepository
 from app.repositories.user_repository import UserRepository
 from app.schemas.auth import LoginRequest, ResetPasswordRequest, SignupRequest
 from app.services.otp_service import OTPService
+from app.services.security_service import SecurityService
 
 logger = get_logger(__name__)
 
@@ -149,9 +151,19 @@ class AuthService:
     # LOGIN
     # ------------------------------------------------------------------
     async def login(self, payload: LoginRequest) -> tuple[User, str, str]:
+        security_service = SecurityService(self.session)
+        client_ip = get_client_ip()
         user = await self.user_repo.get_by_email(payload.email)
 
         if user is None or not verify_password(payload.password, user.hashed_password):
+            if user is not None:
+                await security_service.record_login_attempt(
+                    user=user,
+                    email_attempted=payload.email,
+                    success=False,
+                    failure_reason="invalid_credentials",
+                    ip_address=client_ip,
+                )
             raise InvalidCredentialsException()
 
         if not user.is_email_verified:
@@ -160,7 +172,20 @@ class AuthService:
         if not user.is_active:
             raise UnauthorizedException("This account has been deactivated")
 
+        if await security_service.is_locked(user.id):
+            await security_service.record_login_attempt(
+                user=user,
+                email_attempted=payload.email,
+                success=False,
+                failure_reason="account_locked",
+                ip_address=client_ip,
+            )
+            raise UnauthorizedException("This account has been locked. Please contact support.")
+
         access_token, refresh_token = await self._issue_tokens(user)
+        await security_service.record_login_attempt(
+            user=user, email_attempted=payload.email, success=True, ip_address=client_ip
+        )
         await self.session.commit()
 
         logger.info("user_login", user_id=str(user.id))

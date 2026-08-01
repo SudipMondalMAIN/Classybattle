@@ -4,6 +4,9 @@ Aggregates all v1 routers into a single APIRouter.
 from fastapi import APIRouter
 
 from app.api.v1.achievement_routes import router as achievement_router
+from app.api.v1.admin_dashboard_routes import router as admin_dashboard_router
+from app.api.v1.anti_cheat_routes import router as anti_cheat_router
+from app.api.v1.security_routes import router as security_router
 from app.api.v1.auth_routes import router as auth_router
 from app.api.v1.game_mode_routes import router as game_mode_router
 from app.api.v1.game_routes import router as game_router
@@ -45,3 +48,6 @@ api_v1_router.include_router(leaderboard_router)
 api_v1_router.include_router(social_router)
 api_v1_router.include_router(achievement_router)
 api_v1_router.include_router(moderation_router)
+api_v1_router.include_router(admin_dashboard_router)
+api_v1_router.include_router(security_router)
+api_v1_router.include_router(anti_cheat_router)
