@@ -67,6 +67,15 @@ from app.models.prize import (
     PrizePoolStatus,
 )
 from app.models.refresh_token import RefreshToken
+from app.models.social import (
+    ActivityFeedEntry,
+    ActivityType,
+    Follow,
+    Friendship,
+    FriendshipStatus,
+    PlayerProfile,
+    ProfileVisibility,
+)
 from app.models.team import Team, TeamStatus
 from app.models.team_member import TeamMember, TeamMemberRole
 from app.models.tournament import (
@@ -155,4 +164,11 @@ __all__ = [
     "LeaderboardPeriodType",
     "LeaderboardSourceEvent",
     "LeaderboardUpdateLog",
+    "PlayerProfile",
+    "ProfileVisibility",
+    "Friendship",
+    "FriendshipStatus",
+    "Follow",
+    "ActivityFeedEntry",
+    "ActivityType",
 ]
