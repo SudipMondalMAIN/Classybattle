@@ -65,9 +65,22 @@ class Settings(BaseSettings):
 
     # ---------------- RATE LIMITING ----------------
     RATE_LIMIT_PER_MINUTE: int = 60
+    AUTH_RATE_LIMIT: str = "10/minute"
+    OTP_RATE_LIMIT: str = "5/minute"
+
+    # ---------------- PROXY / CLIENT IP ----------------
+    # Number of trusted reverse-proxy hops in front of the app (e.g. Render's
+    # own edge proxy = 1). Used to safely resolve the real client IP from
+    # X-Forwarded-For without letting a client spoof it. See app/core/client_ip.py.
+    TRUSTED_PROXY_COUNT: int = 1
 
     # ---------------- LOGGING ----------------
     LOG_LEVEL: str = "INFO"
+
+    # ---------------- SENTRY ----------------
+    # Leave empty to disable Sentry entirely (no startup error).
+    SENTRY_DSN: str = ""
+    SENTRY_TRACES_SAMPLE_RATE: float = 0.0
 
     # ---------------- API DOCUMENTATION ----------------
     # Explicit override for exposing Swagger/Redoc/OpenAPI JSON. When left

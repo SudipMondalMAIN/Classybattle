@@ -1,11 +1,12 @@
 """
 Authentication API routes.
 """
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config.settings import settings
 from app.database.session import get_db_session
+from app.middleware.rate_limiter import limiter
 from app.models.otp import OTPPurpose
 from app.schemas.auth import (
     AccessTokenResponse,
@@ -28,7 +29,10 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
 @router.post("/signup", response_model=SignupInitResponse, status_code=status.HTTP_201_CREATED)
-async def signup(payload: SignupRequest, session: AsyncSession = Depends(get_db_session)):
+@limiter.limit(settings.AUTH_RATE_LIMIT)
+async def signup(
+    request: Request, payload: SignupRequest, session: AsyncSession = Depends(get_db_session)
+):
     """Step 1 of signup: validate details, create pending account, send OTP."""
     service = AuthService(session)
     await service.initiate_signup(payload)
@@ -40,8 +44,11 @@ async def signup(payload: SignupRequest, session: AsyncSession = Depends(get_db_
 
 
 @router.post("/signup/verify-otp", response_model=TokenResponse)
+@limiter.limit(settings.OTP_RATE_LIMIT)
 async def verify_signup_otp(
-    payload: VerifySignupOTPRequest, session: AsyncSession = Depends(get_db_session)
+    request: Request,
+    payload: VerifySignupOTPRequest,
+    session: AsyncSession = Depends(get_db_session),
 ):
     """Step 2 of signup: verify OTP, activate account, return tokens."""
     service = AuthService(session)
@@ -54,14 +61,20 @@ async def verify_signup_otp(
 
 
 @router.post("/otp/resend", response_model=MessageResponse)
-async def resend_otp(payload: ResendOTPRequest, session: AsyncSession = Depends(get_db_session)):
+@limiter.limit(settings.OTP_RATE_LIMIT)
+async def resend_otp(
+    request: Request, payload: ResendOTPRequest, session: AsyncSession = Depends(get_db_session)
+):
     service = AuthService(session)
     await service.resend_otp(payload.email, OTPPurpose(payload.purpose))
     return MessageResponse(message="OTP resent successfully")
 
 
 @router.post("/login", response_model=TokenResponse)
-async def login(payload: LoginRequest, session: AsyncSession = Depends(get_db_session)):
+@limiter.limit(settings.AUTH_RATE_LIMIT)
+async def login(
+    request: Request, payload: LoginRequest, session: AsyncSession = Depends(get_db_session)
+):
     service = AuthService(session)
     user, access_token, refresh_token = await service.login(payload)
     return TokenResponse(
@@ -88,8 +101,11 @@ async def logout(payload: RefreshTokenRequest, session: AsyncSession = Depends(g
 
 
 @router.post("/password/forgot", response_model=MessageResponse)
+@limiter.limit(settings.AUTH_RATE_LIMIT)
 async def forgot_password(
-    payload: ForgotPasswordRequest, session: AsyncSession = Depends(get_db_session)
+    request: Request,
+    payload: ForgotPasswordRequest,
+    session: AsyncSession = Depends(get_db_session),
 ):
     service = AuthService(session)
     await service.forgot_password(payload.email)
@@ -99,8 +115,11 @@ async def forgot_password(
 
 
 @router.post("/password/verify-otp", response_model=MessageResponse)
+@limiter.limit(settings.OTP_RATE_LIMIT)
 async def verify_reset_otp(
-    payload: VerifyResetOTPRequest, session: AsyncSession = Depends(get_db_session)
+    request: Request,
+    payload: VerifyResetOTPRequest,
+    session: AsyncSession = Depends(get_db_session),
 ):
     service = AuthService(session)
     await service.verify_reset_otp(payload.email, payload.otp)
@@ -108,8 +127,9 @@ async def verify_reset_otp(
 
 
 @router.post("/password/reset", response_model=MessageResponse)
+@limiter.limit(settings.AUTH_RATE_LIMIT)
 async def reset_password(
-    payload: ResetPasswordRequest, session: AsyncSession = Depends(get_db_session)
+    request: Request, payload: ResetPasswordRequest, session: AsyncSession = Depends(get_db_session)
 ):
     service = AuthService(session)
     await service.reset_password(payload)

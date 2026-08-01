@@ -11,12 +11,14 @@ from slowapi.middleware import SlowAPIMiddleware
 from app.api.v1.router import api_v1_router
 from app.config.settings import settings
 from app.core.logging import configure_logging, get_logger
+from app.core.sentry import init_sentry
 from app.middleware.exception_handlers import register_exception_handlers
 from app.middleware.logging_middleware import RequestLoggingMiddleware
 from app.middleware.rate_limiter import limiter
 from app.notifications.push_service import init_firebase
 
 configure_logging()
+init_sentry()
 logger = get_logger("main")
 
 
