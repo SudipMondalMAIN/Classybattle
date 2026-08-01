@@ -1,6 +1,6 @@
 """analytics, admin dashboard, anti-cheat and security - phase 16
 
-Revision ID: 0017_analytics_security_anticheat
+Revision ID: 0017_analytics_anticheat
 Revises: 0016_achievements_moderation
 Create Date: 2026-08-01
 
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision: str = "0017_analytics_security_anticheat"
+revision: str = "0017_analytics_anticheat"
 down_revision: Union[str, None] = "0016_achievements_moderation"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None

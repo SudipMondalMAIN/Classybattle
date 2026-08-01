@@ -45,11 +45,13 @@ def _to_psycopg2_dsn(url: str) -> str:
 
 def _widen_version_column_if_exists(conn) -> None:
     # Alembic creates alembic_version.version_num as VARCHAR(32) by default.
-    # Some revision ids in this repo (e.g.
-    # "0017_analytics_security_anticheat", 33 chars) are longer than that,
-    # which makes Postgres raise StringDataRightTruncationError when Alembic
-    # tries to write the new version. No-op if the table doesn't exist yet
-    # (fresh DB, before Alembic's first run) or is already wide enough.
+    # All revision ids in this repo are now kept under that limit, but we
+    # still widen the column defensively (e.g. for old databases stuck with
+    # a pre-fix narrow column, or future revision ids that creep past 32
+    # chars), which makes Postgres raise StringDataRightTruncationError when
+    # Alembic tries to write a version that doesn't fit. No-op if the table
+    # doesn't exist yet (fresh DB, before Alembic's first run) or is already
+    # wide enough.
     with conn.cursor() as cur:
         cur.execute(
             """

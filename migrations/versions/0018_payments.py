@@ -1,7 +1,7 @@
 """manual payment verification system - phase 17
 
 Revision ID: 0018_payments
-Revises: 0017_analytics_security_anticheat
+Revises: 0017_analytics_anticheat
 Create Date: 2026-08-01
 
 """
@@ -12,7 +12,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision: str = "0018_payments"
-down_revision: Union[str, None] = "0017_analytics_security_anticheat"
+down_revision: Union[str, None] = "0017_analytics_anticheat"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
