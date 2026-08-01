@@ -35,8 +35,16 @@ from app.config.settings import settings
 MIGRATION_LOCK_KEY = 875_142_339_001
 
 
+def _to_psycopg2_dsn(url: str) -> str:
+    # psycopg2.connect() doesn't understand SQLAlchemy-style driver suffixes
+    # like "postgresql+psycopg2://" — it only accepts "postgresql://".
+    if url.startswith("postgresql+psycopg2://"):
+        return "postgresql://" + url[len("postgresql+psycopg2://"):]
+    return url
+
+
 def main() -> int:
-    conn = psycopg2.connect(settings.DATABASE_URL_SYNC)
+    conn = psycopg2.connect(_to_psycopg2_dsn(settings.DATABASE_URL_SYNC))
     conn.autocommit = True
     try:
         with conn.cursor() as cur:
