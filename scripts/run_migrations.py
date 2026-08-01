@@ -43,6 +43,31 @@ def _to_psycopg2_dsn(url: str) -> str:
     return url
 
 
+def _widen_version_column_if_exists(conn) -> None:
+    # Alembic creates alembic_version.version_num as VARCHAR(32) by default.
+    # Some revision ids in this repo (e.g.
+    # "0017_analytics_security_anticheat", 33 chars) are longer than that,
+    # which makes Postgres raise StringDataRightTruncationError when Alembic
+    # tries to write the new version. No-op if the table doesn't exist yet
+    # (fresh DB, before Alembic's first run) or is already wide enough.
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            DO $$
+            BEGIN
+                IF EXISTS (
+                    SELECT 1 FROM information_schema.tables
+                    WHERE table_name = 'alembic_version'
+                ) THEN
+                    ALTER TABLE alembic_version
+                        ALTER COLUMN version_num TYPE VARCHAR(255);
+                END IF;
+            END
+            $$;
+            """
+        )
+
+
 def main() -> int:
     conn = psycopg2.connect(_to_psycopg2_dsn(settings.DATABASE_URL_SYNC))
     conn.autocommit = True
@@ -52,7 +77,20 @@ def main() -> int:
             cur.execute("SELECT pg_advisory_lock(%s)", (MIGRATION_LOCK_KEY,))
             print("Migration lock acquired, running alembic upgrade head", flush=True)
 
+        # Widen up front for the common case (table already exists from a
+        # previous deploy).
+        _widen_version_column_if_exists(conn)
+
         result = subprocess.run(["alembic", "upgrade", "head"])
+
+        if result.returncode != 0:
+            # Covers the fresh-DB case: alembic_version didn't exist yet on
+            # the first pass above, so Alembic created it with the narrow
+            # VARCHAR(32) default itself while applying 0001. Widen it now
+            # that it exists and retry once.
+            print("alembic upgrade failed, widening alembic_version and retrying once", flush=True)
+            _widen_version_column_if_exists(conn)
+            result = subprocess.run(["alembic", "upgrade", "head"])
 
         with conn.cursor() as cur:
             cur.execute("SELECT pg_advisory_unlock(%s)", (MIGRATION_LOCK_KEY,))
