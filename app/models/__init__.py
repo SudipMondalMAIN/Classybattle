@@ -6,6 +6,17 @@ from app.database.base import Base
 from app.models.audit_log import AuditAction, AuditActorType, AuditLog
 from app.models.device_token import DeviceToken
 from app.models.idempotency_key import IdempotencyKey, IdempotencyKeyStatus
+from app.models.leaderboard import (
+    LeaderboardPeriodType,
+    LeaderboardSourceEvent,
+    LeaderboardUpdateLog,
+    PlayerPeriodStats,
+    PlayerStatistics,
+    RankHistory,
+    RankingScope,
+    TeamPeriodStats,
+    TeamStatistics,
+)
 from app.models.game import Game
 from app.models.game_mode import GameMode
 from app.models.game_profile import UserGameProfile
@@ -135,4 +146,13 @@ __all__ = [
     "LiveMatchScore",
     "LiveTournamentState",
     "LiveTournamentStatus",
+    "PlayerStatistics",
+    "TeamStatistics",
+    "PlayerPeriodStats",
+    "TeamPeriodStats",
+    "RankHistory",
+    "RankingScope",
+    "LeaderboardPeriodType",
+    "LeaderboardSourceEvent",
+    "LeaderboardUpdateLog",
 ]

@@ -48,6 +48,7 @@ from app.repositories.participant_repository import ParticipantRepository
 from app.repositories.prize_repository import PrizePayoutRepository, PrizePoolRepository
 from app.repositories.tournament_repository import TournamentRepository
 from app.services.audit_service import AuditService
+from app.services.leaderboard_service import LeaderboardService
 from app.services.wallet_service import WalletService
 
 _MANAGER_ROLES = {UserRole.ADMIN, UserRole.SUPER_ADMIN}
@@ -63,6 +64,7 @@ class PrizeService:
         self.participant_repo = ParticipantRepository(session)
         self.audit = AuditService(session)
         self.wallet_service = WalletService(session)
+        self.leaderboard_service = LeaderboardService(session)
 
     # ------------------------------------------------------------------
     # Authorization helper
@@ -447,6 +449,13 @@ class PrizeService:
         payout.failure_reason = None
         payout.performed_by = admin.id if admin is not None else None
         await self.session.flush()
+
+        try:
+            await self.leaderboard_service.record_prize_credit(
+                payout_id=payout.id, user_id=payout.user_id, team_id=None, amount=payout.amount
+            )
+        except Exception:  # noqa: BLE001 - leaderboard stats must never break payout settlement
+            pass
 
         try:
             from app.models.notification import NotificationEventType

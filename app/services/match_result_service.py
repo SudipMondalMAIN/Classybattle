@@ -62,6 +62,7 @@ from app.repositories.participant_repository import ParticipantRepository
 from app.repositories.team_repository import TeamRepository
 from app.repositories.tournament_repository import TournamentRepository
 from app.services.audit_service import AuditService
+from app.services.leaderboard_service import LeaderboardService
 from app.services.prize_service import PrizeService
 
 _MANAGER_ROLES = {UserRole.ADMIN, UserRole.SUPER_ADMIN}
@@ -85,6 +86,7 @@ class MatchResultService:
         self.participant_repo = ParticipantRepository(session)
         self.audit = AuditService(session)
         self.prize_service = PrizeService(session)
+        self.leaderboard_service = LeaderboardService(session)
 
     # ------------------------------------------------------------------
     # Authorization helpers
@@ -609,6 +611,13 @@ class MatchResultService:
         if not winners:
             winners = await self.auto_select_winners(match_id, current_user)
             result = await self.result_repo.get_by_match_id(match_id)
+
+        try:
+            await self.leaderboard_service.record_match_completion(
+                match=match, result=result, winners=winners
+            )
+        except Exception:  # noqa: BLE001 - leaderboard stats must never break result approval
+            pass
 
         await self.audit.record(
             entity=_RESULT_ENTITY,
