@@ -27,11 +27,11 @@ def _base_columns():
 
 
 def upgrade() -> None:
-    user_role = postgresql.ENUM("user", "admin", "super_admin", name="user_role")
-    user_status = postgresql.ENUM("active", "suspended", "banned", name="user_status")
-    otp_purpose = postgresql.ENUM("signup_verification", "password_reset", name="otp_purpose")
-    notif_channel = postgresql.ENUM("push", "email", "in_app", name="notification_channel")
-    notif_status = postgresql.ENUM("pending", "sent", "failed", name="notification_status")
+    user_role = postgresql.ENUM("user", "admin", "super_admin", name="user_role", create_type=False)
+    user_status = postgresql.ENUM("active", "suspended", "banned", name="user_status", create_type=False)
+    otp_purpose = postgresql.ENUM("signup_verification", "password_reset", name="otp_purpose", create_type=False)
+    notif_channel = postgresql.ENUM("push", "email", "in_app", name="notification_channel", create_type=False)
+    notif_status = postgresql.ENUM("pending", "sent", "failed", name="notification_status", create_type=False)
 
     bind = op.get_bind()
     user_role.create(bind, checkfirst=True)
