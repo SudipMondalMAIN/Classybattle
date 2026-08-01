@@ -3,7 +3,6 @@ Portable column types shared across models.
 """
 from sqlalchemy import JSON
 from sqlalchemy.dialects.postgresql import JSONB as PG_JSONB
-from sqlalchemy.types import TypeDecorator
 
 # JSONB is a Postgres-only dialect type. Production/staging always run on
 # Postgres, but the automated test suite (tests/conftest.py) uses an

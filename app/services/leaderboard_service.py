@@ -37,7 +37,6 @@ being required on every single read.
 from __future__ import annotations
 
 import math
-from collections import defaultdict
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Iterable, Optional, Sequence

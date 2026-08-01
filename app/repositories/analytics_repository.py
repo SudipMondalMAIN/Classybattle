@@ -6,10 +6,9 @@ Provides read-only aggregate queries across existing domain tables
 plus a small cache table (AnalyticsSnapshot) so repeated dashboard reads
 don't need to recompute the same aggregation within the same period.
 """
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Optional, Sequence
-from uuid import UUID
 
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert

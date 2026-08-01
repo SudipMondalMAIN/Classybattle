@@ -12,7 +12,6 @@ row, so the wallet balance is always reconstructible from/consistent
 with the transaction ledger.
 """
 from decimal import Decimal
-from typing import Optional
 from uuid import UUID
 
 from sqlalchemy import CheckConstraint, ForeignKey, Numeric, String, UniqueConstraint

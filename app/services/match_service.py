@@ -38,7 +38,7 @@ from app.models.match_participant import (
     MatchParticipant,
 )
 from app.models.participant import ParticipantStatus
-from app.models.team import Team, TeamStatus
+from app.models.team import TeamStatus
 from app.models.tournament import TeamRegistrationMode, Tournament
 from app.models.user import User, UserRole
 from app.repositories.match_participant_repository import MatchParticipantRepository

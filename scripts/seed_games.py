@@ -5,7 +5,6 @@ schemas. Run with: python -m scripts.seed_games
 import asyncio
 
 from app.database.session import AsyncSessionLocal
-from app.models.game import Game
 from app.repositories.game_repository import GameRepository
 
 GAMES = [

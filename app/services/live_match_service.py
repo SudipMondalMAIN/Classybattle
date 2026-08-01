@@ -14,13 +14,12 @@ progression into that same flow.
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Optional, Sequence
+from typing import Optional
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import (
-    ConflictException,
     ForbiddenException,
     NotFoundException,
     ValidationException,

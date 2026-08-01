@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database.session import get_db_session
 from app.dependencies.auth import get_current_active_verified_user
 from app.models.match import MatchStatus
-from app.models.match_participant import MatchAssignmentType, MatchCheckInStatus
+from app.models.match_participant import MatchAssignmentType
 from app.models.user import User
 from app.schemas.match import (
     AssignParticipantRequest,

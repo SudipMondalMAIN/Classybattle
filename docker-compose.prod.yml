@@ -1,0 +1,23 @@
+version: "3.9"
+
+# Production overlay. Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# Differences from the base (dev) compose file:
+#   - no source bind-mount (image is immutable, code baked in at build time)
+#   - no --reload, runs multiple uvicorn workers
+#   - Postgres port is not published to the host
+#   - restart policy is stricter
+
+services:
+  api:
+    volumes: []
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
+    restart: always
+    environment:
+      APP_ENV: production
+      APP_DEBUG: "false"
+
+  db:
+    restart: always
+    ports: []

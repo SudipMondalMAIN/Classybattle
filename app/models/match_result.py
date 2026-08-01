@@ -15,7 +15,6 @@ from typing import Optional
 
 from sqlalchemy import (
     Boolean,
-    CheckConstraint,
     DateTime,
     Enum,
     ForeignKey,

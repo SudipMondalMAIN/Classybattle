@@ -5,7 +5,7 @@ Loads and validates all environment variables in one place.
 from functools import lru_cache
 from typing import List, Optional
 
-from pydantic import Field, field_validator
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     # ---------------- APP ----------------
     APP_NAME: str = "ClassyBattle"
     APP_ENV: str = "development"
-    APP_DEBUG: bool = True
+    APP_DEBUG: bool = False
     API_V1_PREFIX: str = "/api/v1"
     SECRET_KEY: str
 

@@ -12,7 +12,6 @@ Covers:
 import enum
 import uuid
 from datetime import date, datetime
-from decimal import Decimal
 from typing import Optional
 
 from sqlalchemy import (
@@ -23,7 +22,6 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
-    Numeric,
     String,
     UniqueConstraint,
 )

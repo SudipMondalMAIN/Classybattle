@@ -2,14 +2,12 @@
 Tournament service — validation, slug/status management, and orchestration
 between the repository layer and Supabase-backed asset storage.
 """
-from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID, uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import (
-    BadRequestException,
     ConflictException,
     ForbiddenException,
     NotFoundException,

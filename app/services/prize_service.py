@@ -34,7 +34,7 @@ from app.core.exceptions import (
     ValidationException,
 )
 from app.models.audit_log import AuditAction, AuditActorType
-from app.models.participant import Participant, ParticipantStatus
+from app.models.participant import ParticipantStatus
 from app.models.prize import (
     PRIZE_POOL_STATUS_TRANSITIONS,
     PrizeDistributionType,

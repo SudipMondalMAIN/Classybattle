@@ -8,7 +8,6 @@ transitions, entry-fee payment/refunds via the Wallet module (Phase 8),
 and authorization between the repository layer and the Tournament module.
 """
 from datetime import datetime, timezone
-from decimal import Decimal
 from typing import Optional
 from uuid import UUID
 

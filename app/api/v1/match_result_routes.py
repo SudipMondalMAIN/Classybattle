@@ -22,7 +22,6 @@ from app.schemas.match_result import (
     MatchResultUpdateRequest,
     MatchWinnerRead,
     PaginatedMatchResults,
-    PaginatedMatchWinners,
 )
 from app.services.idempotency_service import IdempotencyService
 from app.services.match_result_service import MatchResultService

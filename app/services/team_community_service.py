@@ -47,8 +47,8 @@ from app.models.team_community import (
     TeamJoinRequest,
     TeamJoinRequestStatus,
 )
-from app.models.team_member import TeamMember, TeamMemberRole
-from app.models.tournament import Tournament, TournamentStatus
+from app.models.team_member import TeamMemberRole
+from app.models.tournament import Tournament
 from app.models.user import User, UserRole
 from app.notifications.dispatch_service import NotificationDispatchService
 from app.repositories.participant_repository import ParticipantRepository

@@ -9,7 +9,6 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import UnauthorizedException
 from app.core.security import TokenType, decode_token
 from app.database.session import get_db_session
 from app.dependencies.auth import bearer_scheme, get_current_active_verified_user

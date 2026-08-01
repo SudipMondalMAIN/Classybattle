@@ -37,7 +37,6 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import (
-    BadRequestException,
     ConflictException,
     ForbiddenException,
     NotFoundException,

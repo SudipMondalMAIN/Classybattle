@@ -2,7 +2,6 @@
 Leaderboards, Rankings & Player/Team Statistics API routes — Phase 14.
 """
 import math
-from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query

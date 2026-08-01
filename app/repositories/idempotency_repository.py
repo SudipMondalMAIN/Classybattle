@@ -3,7 +3,6 @@ IdempotencyKeyRepository — persistence for replay-protection records.
 """
 from datetime import datetime, timezone
 from typing import Any, Optional
-from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession

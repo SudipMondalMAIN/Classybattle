@@ -261,7 +261,7 @@ class TeamService:
         participant_id = await self._ensure_participant_for_member(
             tournament, team, current_user
         )
-        member = await self.member_repo.create(
+        await self.member_repo.create(
             team_id=team.id,
             user_id=current_user.id,
             participant_id=participant_id,
