@@ -2,7 +2,7 @@
 Tournament Core API routes (Phase 2).
 """
 import math
-from typing import Optional
+from typing import Optional, Union
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Query, UploadFile
@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import ValidationException
 from app.database.session import get_db_session
-from app.dependencies.auth import get_current_active_verified_user
+from app.dependencies.auth import get_current_active_verified_user, require_admin
 from app.models.tournament import TournamentStatus, TournamentVisibility
 from app.models.user import User
 from app.schemas.common import MessageResponse
@@ -27,11 +27,39 @@ from app.services.tournament_service import TournamentService
 
 router = APIRouter(prefix="/tournaments", tags=["Tournaments"])
 
+# Convenience aliases the frontend can send instead of (or alongside) the
+# exact TournamentStatus enum values. "upcoming" isn't a stored status by
+# itself — it's a friendly name for "hasn't gone live yet".
+_STATUS_ALIASES: dict[str, list[TournamentStatus]] = {
+    "upcoming": [
+        TournamentStatus.PUBLISHED,
+        TournamentStatus.REGISTRATION_OPEN,
+        TournamentStatus.REGISTRATION_CLOSED,
+    ],
+    "ongoing": [TournamentStatus.LIVE],
+    "past": [TournamentStatus.COMPLETED, TournamentStatus.ARCHIVED, TournamentStatus.CANCELLED],
+}
+
+
+def _resolve_status_filter(
+    status: Optional[str],
+) -> Optional[Union[TournamentStatus, list[TournamentStatus]]]:
+    if status is None:
+        return None
+    key = status.strip().lower()
+    if key in _STATUS_ALIASES:
+        return _STATUS_ALIASES[key]
+    try:
+        return TournamentStatus(key)
+    except ValueError:
+        valid = ", ".join(sorted(set(_STATUS_ALIASES) | {s.value for s in TournamentStatus}))
+        raise ValidationException(f"Invalid status '{status}'. Valid values: {valid}")
+
 
 @router.post("", response_model=TournamentRead, status_code=201)
 async def create_tournament(
     payload: TournamentCreate,
-    current_user: User = Depends(get_current_active_verified_user),
+    current_user: User = Depends(require_admin),
     session: AsyncSession = Depends(get_db_session),
 ):
     service = TournamentService(session)
@@ -44,7 +72,7 @@ async def list_tournaments(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     game_id: Optional[UUID] = Query(None),
-    status: Optional[TournamentStatus] = Query(None),
+    status: Optional[str] = Query(None),
     visibility: Optional[TournamentVisibility] = Query(None),
     is_featured: Optional[bool] = Query(None),
     search: Optional[str] = Query(None, max_length=200),
@@ -57,7 +85,7 @@ async def list_tournaments(
         page=page,
         page_size=page_size,
         game_id=game_id,
-        status=status,
+        status=_resolve_status_filter(status),
         visibility=visibility,
         is_featured=is_featured,
         search=search,

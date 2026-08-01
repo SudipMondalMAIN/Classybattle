@@ -1,7 +1,7 @@
 """
 Tournament repository — queries specific to the Tournament module.
 """
-from typing import Optional, Sequence
+from typing import Optional, Sequence, Union
 from uuid import UUID
 
 from sqlalchemy import String, asc, cast, desc, func, or_, select
@@ -53,7 +53,7 @@ class TournamentRepository(BaseRepository[Tournament]):
         page: int = 1,
         page_size: int = 20,
         game_id: Optional[UUID] = None,
-        status: Optional[TournamentStatus] = None,
+        status: Optional[Union[TournamentStatus, list[TournamentStatus]]] = None,
         visibility: Optional[TournamentVisibility] = None,
         is_featured: Optional[bool] = None,
         search: Optional[str] = None,
@@ -70,7 +70,10 @@ class TournamentRepository(BaseRepository[Tournament]):
         if game_id is not None:
             conditions.append(Tournament.game_id == game_id)
         if status is not None:
-            conditions.append(Tournament.status == status)
+            if isinstance(status, list):
+                conditions.append(Tournament.status.in_(status))
+            else:
+                conditions.append(Tournament.status == status)
         if visibility is not None:
             conditions.append(Tournament.visibility == visibility)
         if is_featured is not None:

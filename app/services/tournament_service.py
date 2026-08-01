@@ -2,7 +2,7 @@
 Tournament service — validation, slug/status management, and orchestration
 between the repository layer and Supabase-backed asset storage.
 """
-from typing import Optional
+from typing import Optional, Union
 from uuid import UUID, uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -234,7 +234,7 @@ class TournamentService:
         page: int,
         page_size: int,
         game_id: Optional[UUID],
-        status: Optional[TournamentStatus],
+        status: Optional[Union[TournamentStatus, list[TournamentStatus]]],
         visibility,
         is_featured: Optional[bool],
         search: Optional[str],

@@ -14,6 +14,20 @@ class ProfileFieldSchema(BaseModel):
     required: bool = True
 
 
+class GameCreate(BaseModel):
+    name: str = Field(..., min_length=2, max_length=100)
+    icon_url: Optional[str] = Field(None, max_length=500)
+    is_active: bool = True
+    profile_schema: list[ProfileFieldSchema] = Field(default_factory=list)
+
+
+class GameUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=2, max_length=100)
+    icon_url: Optional[str] = Field(None, max_length=500)
+    is_active: Optional[bool] = None
+    profile_schema: Optional[list[ProfileFieldSchema]] = None
+
+
 class GameRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

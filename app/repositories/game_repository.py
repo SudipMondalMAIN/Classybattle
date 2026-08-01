@@ -26,6 +26,16 @@ class GameRepository(BaseRepository[Game]):
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
+    async def name_exists(self, name: str) -> bool:
+        stmt = select(Game).where(Game.name == name, Game.deleted_at.is_(None))
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none() is not None
+
+    async def slug_exists(self, slug: str) -> bool:
+        stmt = select(Game).where(Game.slug == slug, Game.deleted_at.is_(None))
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none() is not None
+
 
 class UserGameProfileRepository(BaseRepository[UserGameProfile]):
     def __init__(self, session: AsyncSession) -> None:
