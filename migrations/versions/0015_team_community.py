@@ -19,12 +19,12 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     team_invitation_status = postgresql.ENUM(
-        "pending", "accepted", "rejected", "cancelled", "expired", name="team_invitation_status"
+        "pending", "accepted", "rejected", "cancelled", "expired", name="team_invitation_status", create_type=False
     )
     team_invitation_status.create(op.get_bind(), checkfirst=True)
 
     team_join_request_status = postgresql.ENUM(
-        "pending", "accepted", "rejected", "cancelled", name="team_join_request_status"
+        "pending", "accepted", "rejected", "cancelled", name="team_join_request_status", create_type=False
     )
     team_join_request_status.create(op.get_bind(), checkfirst=True)
 
@@ -48,6 +48,7 @@ def upgrade() -> None:
         "team_unlocked",
         "team_disbanded",
         name="team_activity_type",
+        create_type=False,
     )
     team_activity_type.create(op.get_bind(), checkfirst=True)
 

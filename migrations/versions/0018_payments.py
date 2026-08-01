@@ -21,10 +21,10 @@ def upgrade() -> None:
     bind = op.get_bind()
 
     payment_provider = postgresql.ENUM(
-        "manual_upi", "razorpay", "cashfree", "phonepe", name="payment_provider"
+        "manual_upi", "razorpay", "cashfree", "phonepe", name="payment_provider", create_type=False
     )
     payment_request_status = postgresql.ENUM(
-        "pending", "approved", "rejected", "cancelled", "on_hold", name="payment_request_status"
+        "pending", "approved", "rejected", "cancelled", "on_hold", name="payment_request_status", create_type=False
     )
     payment_rejection_reason = postgresql.ENUM(
         "invalid_utr",
@@ -33,6 +33,7 @@ def upgrade() -> None:
         "duplicate_utr",
         "other",
         name="payment_rejection_reason",
+        create_type=False,
     )
     payment_provider.create(bind, checkfirst=True)
     payment_request_status.create(bind, checkfirst=True)

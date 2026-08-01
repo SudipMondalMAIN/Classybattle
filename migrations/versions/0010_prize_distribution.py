@@ -19,13 +19,13 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     prize_distribution_type = postgresql.ENUM(
-        "single_winner", "top_n", "percentage", "fixed_amount", name="prize_distribution_type"
+        "single_winner", "top_n", "percentage", "fixed_amount", name="prize_distribution_type", create_type=False
     )
     prize_pool_status = postgresql.ENUM(
-        "draft", "published", "distributing", "distributed", "cancelled", name="prize_pool_status"
+        "draft", "published", "distributing", "distributed", "cancelled", name="prize_pool_status", create_type=False
     )
     prize_payout_status = postgresql.ENUM(
-        "pending", "processing", "paid", "failed", "cancelled", name="prize_payout_status"
+        "pending", "processing", "paid", "failed", "cancelled", name="prize_payout_status", create_type=False
     )
     bind = op.get_bind()
     prize_distribution_type.create(bind, checkfirst=True)

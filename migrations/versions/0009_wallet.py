@@ -27,9 +27,10 @@ def upgrade() -> None:
         "bonus",
         "admin_adjustment",
         name="wallet_transaction_type",
+        create_type=False,
     )
     wallet_transaction_status = postgresql.ENUM(
-        "pending", "success", "failed", "cancelled", name="wallet_transaction_status"
+        "pending", "success", "failed", "cancelled", name="wallet_transaction_status", create_type=False
     )
     bind = op.get_bind()
     wallet_transaction_type.create(bind, checkfirst=True)

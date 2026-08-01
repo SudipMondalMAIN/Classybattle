@@ -19,12 +19,12 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     profile_visibility = postgresql.ENUM(
-        "public", "private", "friends_only", name="profile_visibility"
+        "public", "private", "friends_only", name="profile_visibility", create_type=False
     )
     profile_visibility.create(op.get_bind(), checkfirst=True)
 
     friendship_status = postgresql.ENUM(
-        "pending", "accepted", "rejected", "cancelled", "blocked", name="friendship_status"
+        "pending", "accepted", "rejected", "cancelled", "blocked", name="friendship_status", create_type=False
     )
     friendship_status.create(op.get_bind(), checkfirst=True)
 
@@ -37,6 +37,7 @@ def upgrade() -> None:
         "wallet_credited",
         "prize_won",
         name="activity_type",
+        create_type=False,
     )
     activity_type.create(op.get_bind(), checkfirst=True)
 

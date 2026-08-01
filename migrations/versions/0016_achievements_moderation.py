@@ -18,7 +18,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    badge_tier = postgresql.ENUM("bronze", "silver", "gold", "platinum", name="badge_tier")
+    badge_tier = postgresql.ENUM("bronze", "silver", "gold", "platinum", name="badge_tier", create_type=False)
     badge_tier.create(op.get_bind(), checkfirst=True)
 
     achievement_trigger_type = postgresql.ENUM(
@@ -30,13 +30,14 @@ def upgrade() -> None:
         "wallet_milestone",
         "prize_milestone",
         name="achievement_trigger_type",
+        create_type=False,
     )
     achievement_trigger_type.create(op.get_bind(), checkfirst=True)
 
-    achievement_comparison = postgresql.ENUM("gte", "lte", name="achievement_comparison")
+    achievement_comparison = postgresql.ENUM("gte", "lte", name="achievement_comparison", create_type=False)
     achievement_comparison.create(op.get_bind(), checkfirst=True)
 
-    report_target_type = postgresql.ENUM("player", "team", "match", name="report_target_type")
+    report_target_type = postgresql.ENUM("player", "team", "match", name="report_target_type", create_type=False)
     report_target_type.create(op.get_bind(), checkfirst=True)
 
     report_reason = postgresql.ENUM(
@@ -49,23 +50,24 @@ def upgrade() -> None:
         "spam",
         "other",
         name="report_reason",
+        create_type=False,
     )
     report_reason.create(op.get_bind(), checkfirst=True)
 
     report_status = postgresql.ENUM(
-        "pending", "under_review", "resolved", "dismissed", name="report_status"
+        "pending", "under_review", "resolved", "dismissed", name="report_status", create_type=False
     )
     report_status.create(op.get_bind(), checkfirst=True)
 
-    moderation_action_type = postgresql.ENUM("warning", "suspension", "ban", name="moderation_action_type")
+    moderation_action_type = postgresql.ENUM("warning", "suspension", "ban", name="moderation_action_type", create_type=False)
     moderation_action_type.create(op.get_bind(), checkfirst=True)
 
     moderation_action_status = postgresql.ENUM(
-        "active", "expired", "revoked", name="moderation_action_status"
+        "active", "expired", "revoked", name="moderation_action_status", create_type=False
     )
     moderation_action_status.create(op.get_bind(), checkfirst=True)
 
-    appeal_status = postgresql.ENUM("pending", "approved", "rejected", name="appeal_status")
+    appeal_status = postgresql.ENUM("pending", "approved", "rejected", name="appeal_status", create_type=False)
     appeal_status.create(op.get_bind(), checkfirst=True)
 
     # ------------------------------------------------------------------

@@ -34,11 +34,12 @@ def upgrade() -> None:
         "wallet_abuse",
         "other",
         name="security_event_type",
+        create_type=False,
     )
     security_event_type.create(bind, checkfirst=True)
 
     security_event_severity = postgresql.ENUM(
-        "low", "medium", "high", "critical", name="security_event_severity"
+        "low", "medium", "high", "critical", name="security_event_severity", create_type=False
     )
     security_event_severity.create(bind, checkfirst=True)
 
@@ -50,22 +51,24 @@ def upgrade() -> None:
         "wallet_abuse",
         "suspicious_activity",
         name="fraud_flag_type",
+        create_type=False,
     )
     fraud_flag_type.create(bind, checkfirst=True)
 
     fraud_flag_status = postgresql.ENUM(
-        "open", "reviewing", "confirmed", "dismissed", name="fraud_flag_status"
+        "open", "reviewing", "confirmed", "dismissed", name="fraud_flag_status", create_type=False
     )
     fraud_flag_status.create(bind, checkfirst=True)
 
     analytics_metric_type = postgresql.ENUM(
         "user", "tournament", "match", "wallet", "revenue", "prize", "registration", "dashboard",
         name="analytics_metric_type",
+        create_type=False,
     )
     analytics_metric_type.create(bind, checkfirst=True)
 
     analytics_period_type = postgresql.ENUM(
-        "daily", "weekly", "monthly", "custom", name="analytics_period_type"
+        "daily", "weekly", "monthly", "custom", name="analytics_period_type", create_type=False
     )
     analytics_period_type.create(bind, checkfirst=True)
 

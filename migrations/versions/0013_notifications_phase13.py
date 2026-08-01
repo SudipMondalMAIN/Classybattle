@@ -39,6 +39,7 @@ def upgrade() -> None:
         "admin_broadcast",
         "system_announcement",
         name="notification_event_type",
+        create_type=False,
     )
     notification_event_type.create(op.get_bind(), checkfirst=True)
 
