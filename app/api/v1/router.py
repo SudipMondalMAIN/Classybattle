@@ -19,6 +19,7 @@ from app.api.v1.match_routes import router as match_router
 from app.api.v1.moderation_routes import router as moderation_router
 from app.api.v1.notification_routes import router as notification_router
 from app.api.v1.participant_routes import router as participant_router
+from app.api.v1.payment_routes import router as payment_router
 from app.api.v1.prize_routes import router as prize_router
 from app.api.v1.social_routes import router as social_router
 from app.api.v1.team_community_routes import router as team_community_router
@@ -32,6 +33,7 @@ api_v1_router.include_router(health_router)
 api_v1_router.include_router(auth_router)
 api_v1_router.include_router(user_router)
 api_v1_router.include_router(wallet_router)
+api_v1_router.include_router(payment_router)
 api_v1_router.include_router(game_router)
 api_v1_router.include_router(game_mode_router)
 api_v1_router.include_router(map_router)

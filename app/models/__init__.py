@@ -71,6 +71,13 @@ from app.models.notification import (
     NotificationStatus,
 )
 from app.models.otp import OTP
+from app.models.payment import (
+    PaymentProvider,
+    PaymentRejectionReason,
+    PaymentRequest,
+    PaymentRequestStatus,
+    PaymentSettings,
+)
 from app.models.participant import (
     Participant,
     ParticipantPaymentStatus,
@@ -247,4 +254,9 @@ __all__ = [
     "AnalyticsSnapshot",
     "AnalyticsMetricType",
     "AnalyticsPeriodType",
+    "PaymentSettings",
+    "PaymentRequest",
+    "PaymentProvider",
+    "PaymentRequestStatus",
+    "PaymentRejectionReason",
 ]
