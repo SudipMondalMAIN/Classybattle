@@ -78,6 +78,16 @@ from app.models.social import (
 )
 from app.models.team import Team, TeamStatus
 from app.models.team_member import TeamMember, TeamMemberRole
+from app.models.team_community import (
+    MEMBER_HISTORY_ACTIVITY_TYPES,
+    TeamActivityFeedEntry,
+    TeamActivityType,
+    TeamAnnouncement,
+    TeamInvitation,
+    TeamInvitationStatus,
+    TeamJoinRequest,
+    TeamJoinRequestStatus,
+)
 from app.models.tournament import (
     TeamRegistrationMode,
     Tournament,
@@ -171,4 +181,12 @@ __all__ = [
     "Follow",
     "ActivityFeedEntry",
     "ActivityType",
+    "TeamInvitation",
+    "TeamInvitationStatus",
+    "TeamJoinRequest",
+    "TeamJoinRequestStatus",
+    "TeamAnnouncement",
+    "TeamActivityFeedEntry",
+    "TeamActivityType",
+    "MEMBER_HISTORY_ACTIVITY_TYPES",
 ]

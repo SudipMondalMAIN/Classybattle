@@ -16,6 +16,7 @@ from app.api.v1.notification_routes import router as notification_router
 from app.api.v1.participant_routes import router as participant_router
 from app.api.v1.prize_routes import router as prize_router
 from app.api.v1.social_routes import router as social_router
+from app.api.v1.team_community_routes import router as team_community_router
 from app.api.v1.team_routes import router as team_router
 from app.api.v1.tournament_routes import router as tournament_router
 from app.api.v1.user_routes import router as user_router
@@ -33,6 +34,7 @@ api_v1_router.include_router(tournament_router)
 api_v1_router.include_router(participant_router)
 api_v1_router.include_router(prize_router)
 api_v1_router.include_router(team_router)
+api_v1_router.include_router(team_community_router)
 api_v1_router.include_router(match_router)
 api_v1_router.include_router(match_result_router)
 api_v1_router.include_router(live_match_router)
