@@ -22,7 +22,7 @@ from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.base import BaseModel
-from app.database.types import PortableJSONB
+from app.database.types import PortableJSONB, str_enum
 
 
 class ReportTargetType(str, enum.Enum):
@@ -77,7 +77,7 @@ class Report(BaseModel):
         PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
     target_type: Mapped[ReportTargetType] = mapped_column(
-        Enum(ReportTargetType, name="report_target_type"), nullable=False
+        str_enum(ReportTargetType, "report_target_type"), nullable=False
     )
     # Polymorphic reference — user_id for PLAYER, team_id for TEAM,
     # match_id for MATCH. Kept as a bare UUID (no FK) since it points at
@@ -86,11 +86,11 @@ class Report(BaseModel):
     target_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False, index=True)
 
     reason: Mapped[ReportReason] = mapped_column(
-        Enum(ReportReason, name="report_reason"), nullable=False
+        str_enum(ReportReason, "report_reason"), nullable=False
     )
     description: Mapped[Optional[str]] = mapped_column(String(2000), nullable=True)
     status: Mapped[ReportStatus] = mapped_column(
-        Enum(ReportStatus, name="report_status"), default=ReportStatus.PENDING, nullable=False, index=True
+        str_enum(ReportStatus, "report_status"), default=ReportStatus.PENDING, nullable=False, index=True
     )
     evidence_urls: Mapped[Optional[dict]] = mapped_column(PortableJSONB, nullable=True)
 
@@ -111,10 +111,10 @@ class ModerationAction(BaseModel):
         PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
     action_type: Mapped[ModerationActionType] = mapped_column(
-        Enum(ModerationActionType, name="moderation_action_type"), nullable=False, index=True
+        str_enum(ModerationActionType, "moderation_action_type"), nullable=False, index=True
     )
     status: Mapped[ModerationActionStatus] = mapped_column(
-        Enum(ModerationActionStatus, name="moderation_action_status"),
+        str_enum(ModerationActionStatus, "moderation_action_status"),
         default=ModerationActionStatus.ACTIVE,
         nullable=False,
         index=True,
@@ -152,7 +152,7 @@ class Appeal(BaseModel):
     )
     message: Mapped[str] = mapped_column(String(2000), nullable=False)
     status: Mapped[AppealStatus] = mapped_column(
-        Enum(AppealStatus, name="appeal_status"), default=AppealStatus.PENDING, nullable=False, index=True
+        str_enum(AppealStatus, "appeal_status"), default=AppealStatus.PENDING, nullable=False, index=True
     )
     reviewed_by_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True

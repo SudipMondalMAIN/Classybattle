@@ -32,6 +32,7 @@ class PublicUserSummary(BaseModel):
 
     id: UUID
     full_name: str
+    player_uid: str
     country: Optional[str] = None
 
 
@@ -98,6 +99,7 @@ class FriendListItem(BaseModel):
 
     id: UUID
     full_name: str
+    player_uid: str
     country: Optional[str] = None
 
 

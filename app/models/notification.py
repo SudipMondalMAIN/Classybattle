@@ -8,7 +8,7 @@ from typing import Optional
 from uuid import UUID
 
 from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String
-from app.database.types import PortableJSONB
+from app.database.types import PortableJSONB, str_enum
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -61,15 +61,15 @@ class Notification(BaseModel):
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     body: Mapped[str] = mapped_column(String(1000), nullable=False)
     channel: Mapped[NotificationChannel] = mapped_column(
-        Enum(NotificationChannel, name="notification_channel"), nullable=False
+        str_enum(NotificationChannel, "notification_channel"), nullable=False
     )
     status: Mapped[NotificationStatus] = mapped_column(
-        Enum(NotificationStatus, name="notification_status"),
+        str_enum(NotificationStatus, "notification_status"),
         default=NotificationStatus.PENDING,
         nullable=False,
     )
     event_type: Mapped[NotificationEventType] = mapped_column(
-        Enum(NotificationEventType, name="notification_event_type"),
+        str_enum(NotificationEventType, "notification_event_type"),
         default=NotificationEventType.GENERAL,
         nullable=False,
         index=True,

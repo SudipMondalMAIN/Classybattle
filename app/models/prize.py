@@ -34,7 +34,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.base import BaseModel
-from app.database.types import PortableJSONB
+from app.database.types import PortableJSONB, str_enum
 
 
 class PrizeDistributionType(str, enum.Enum):
@@ -91,7 +91,7 @@ class PrizePool(BaseModel):
     currency: Mapped[str] = mapped_column(String(3), default="INR", server_default="INR", nullable=False)
 
     distribution_type: Mapped[PrizeDistributionType] = mapped_column(
-        Enum(PrizeDistributionType, name="prize_distribution_type"), nullable=False
+        str_enum(PrizeDistributionType, "prize_distribution_type"), nullable=False
     )
 
     # Rank-based distribution rules, e.g.:
@@ -102,7 +102,7 @@ class PrizePool(BaseModel):
     distribution_rules: Mapped[list] = mapped_column(PortableJSONB, nullable=False)
 
     status: Mapped[PrizePoolStatus] = mapped_column(
-        Enum(PrizePoolStatus, name="prize_pool_status"),
+        str_enum(PrizePoolStatus, "prize_pool_status"),
         default=PrizePoolStatus.DRAFT,
         nullable=False,
         index=True,
@@ -166,7 +166,7 @@ class PrizePayout(BaseModel):
     currency: Mapped[str] = mapped_column(String(3), default="INR", server_default="INR", nullable=False)
 
     status: Mapped[PrizePayoutStatus] = mapped_column(
-        Enum(PrizePayoutStatus, name="prize_payout_status"),
+        str_enum(PrizePayoutStatus, "prize_payout_status"),
         default=PrizePayoutStatus.PENDING,
         nullable=False,
         index=True,

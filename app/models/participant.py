@@ -22,6 +22,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.base import BaseModel
+from app.database.types import str_enum
 
 
 class RegistrationType(str, enum.Enum):
@@ -102,21 +103,21 @@ class Participant(BaseModel):
     )
 
     registration_type: Mapped[RegistrationType] = mapped_column(
-        Enum(RegistrationType, name="participant_registration_type"),
+        str_enum(RegistrationType, "participant_registration_type"),
         default=RegistrationType.SOLO,
         nullable=False,
     )
     team_name: Mapped[Optional[str]] = mapped_column(String(150), nullable=True)
 
     status: Mapped[ParticipantStatus] = mapped_column(
-        Enum(ParticipantStatus, name="participant_status"),
+        str_enum(ParticipantStatus, "participant_status"),
         default=ParticipantStatus.PENDING,
         nullable=False,
         index=True,
     )
 
     payment_status: Mapped[ParticipantPaymentStatus] = mapped_column(
-        Enum(ParticipantPaymentStatus, name="participant_payment_status"),
+        str_enum(ParticipantPaymentStatus, "participant_payment_status"),
         default=ParticipantPaymentStatus.NOT_REQUIRED,
         nullable=False,
     )

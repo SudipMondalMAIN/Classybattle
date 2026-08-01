@@ -8,6 +8,7 @@ from sqlalchemy import Boolean, Enum, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.base import BaseModel
+from app.database.types import str_enum
 
 
 class UserRole(str, enum.Enum):
@@ -29,12 +30,13 @@ class User(BaseModel):
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
     phone_number: Mapped[str] = mapped_column(String(20), unique=True, index=True, nullable=False)
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
+    player_uid: Mapped[str] = mapped_column(String(8), unique=True, index=True, nullable=False)
 
     role: Mapped[UserRole] = mapped_column(
-        Enum(UserRole, name="user_role"), default=UserRole.USER, nullable=False
+        str_enum(UserRole, "user_role"), default=UserRole.USER, nullable=False
     )
     status: Mapped[UserStatus] = mapped_column(
-        Enum(UserStatus, name="user_status"), default=UserStatus.ACTIVE, nullable=False
+        str_enum(UserStatus, "user_status"), default=UserStatus.ACTIVE, nullable=False
     )
 
     is_email_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

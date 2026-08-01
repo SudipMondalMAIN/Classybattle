@@ -20,6 +20,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.base import BaseModel
+from app.database.types import str_enum
 
 
 class TeamStatus(str, enum.Enum):
@@ -86,7 +87,7 @@ class Team(BaseModel):
     current_members: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
     status: Mapped[TeamStatus] = mapped_column(
-        Enum(TeamStatus, name="team_status"),
+        str_enum(TeamStatus, "team_status"),
         default=TeamStatus.FORMING,
         nullable=False,
         index=True,

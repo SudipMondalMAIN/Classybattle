@@ -19,7 +19,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
 from app.database.base import Base
-from app.database.types import PortableJSONB
+from app.database.types import PortableJSONB, str_enum
 
 
 class IdempotencyKeyStatus(str, enum.Enum):
@@ -67,7 +67,7 @@ class IdempotencyKey(Base):
     request_fingerprint: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
 
     status: Mapped[IdempotencyKeyStatus] = mapped_column(
-        Enum(IdempotencyKeyStatus, name="idempotency_key_status"),
+        str_enum(IdempotencyKeyStatus, "idempotency_key_status"),
         default=IdempotencyKeyStatus.IN_PROGRESS,
         nullable=False,
     )

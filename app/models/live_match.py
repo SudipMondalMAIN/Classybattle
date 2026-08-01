@@ -30,7 +30,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.base import BaseModel
-from app.database.types import PortableJSONB
+from app.database.types import PortableJSONB, str_enum
 
 
 class LiveMatchStatus(str, enum.Enum):
@@ -101,7 +101,7 @@ class LiveMatch(BaseModel):
     )
 
     status: Mapped[LiveMatchStatus] = mapped_column(
-        Enum(LiveMatchStatus, name="live_match_status"),
+        str_enum(LiveMatchStatus, "live_match_status"),
         default=LiveMatchStatus.NOT_STARTED,
         nullable=False,
         index=True,
@@ -155,7 +155,7 @@ class LiveMatchEvent(BaseModel):
     sequence: Mapped[int] = mapped_column(Integer, nullable=False)
 
     event_type: Mapped[LiveMatchEventType] = mapped_column(
-        Enum(LiveMatchEventType, name="live_match_event_type"),
+        str_enum(LiveMatchEventType, "live_match_event_type"),
         nullable=False,
         index=True,
     )
@@ -260,7 +260,7 @@ class LiveTournamentState(BaseModel):
     )
 
     status: Mapped[LiveTournamentStatus] = mapped_column(
-        Enum(LiveTournamentStatus, name="live_tournament_status"),
+        str_enum(LiveTournamentStatus, "live_tournament_status"),
         default=LiveTournamentStatus.NOT_STARTED,
         nullable=False,
         index=True,

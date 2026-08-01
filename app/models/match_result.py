@@ -27,7 +27,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.base import BaseModel
-from app.database.types import PortableJSONB
+from app.database.types import PortableJSONB, str_enum
 
 
 class MatchResultStatus(str, enum.Enum):
@@ -75,7 +75,7 @@ class MatchResult(BaseModel):
     is_tie: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     status: Mapped[MatchResultStatus] = mapped_column(
-        Enum(MatchResultStatus, name="match_result_status"),
+        str_enum(MatchResultStatus, "match_result_status"),
         default=MatchResultStatus.SUBMITTED,
         nullable=False,
         index=True,

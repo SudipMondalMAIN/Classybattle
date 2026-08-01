@@ -17,7 +17,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
 from app.database.base import Base
-from app.database.types import PortableJSONB
+from app.database.types import PortableJSONB, str_enum
 
 
 class AuditActorType(str, enum.Enum):
@@ -66,7 +66,7 @@ class AuditLog(Base):
         index=True,
     )
     actor_type: Mapped[AuditActorType] = mapped_column(
-        Enum(AuditActorType, name="audit_actor_type"), nullable=False
+        str_enum(AuditActorType, "audit_actor_type"), nullable=False
     )
     # Denormalized snapshot so the log stays meaningful even if the user
     # row is later modified, deleted, or the FK above is nulled out.
@@ -74,7 +74,7 @@ class AuditLog(Base):
 
     # ---- What happened ----
     action: Mapped[AuditAction] = mapped_column(
-        Enum(AuditAction, name="audit_action"), nullable=False, index=True
+        str_enum(AuditAction, "audit_action"), nullable=False, index=True
     )
     entity: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     entity_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)

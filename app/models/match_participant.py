@@ -27,6 +27,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.base import BaseModel
+from app.database.types import str_enum
 
 
 class MatchAssignmentType(str, enum.Enum):
@@ -104,7 +105,7 @@ class MatchParticipant(BaseModel):
     slot_number: Mapped[int] = mapped_column(Integer, nullable=False)
 
     assignment_type: Mapped[MatchAssignmentType] = mapped_column(
-        Enum(MatchAssignmentType, name="match_assignment_type"),
+        str_enum(MatchAssignmentType, "match_assignment_type"),
         default=MatchAssignmentType.REGISTERED,
         nullable=False,
     )
@@ -118,7 +119,7 @@ class MatchParticipant(BaseModel):
     # Check-in (§6) / no-show (§7) tracking.
     # ------------------------------------------------------------------
     check_in_status: Mapped[MatchCheckInStatus] = mapped_column(
-        Enum(MatchCheckInStatus, name="match_check_in_status"),
+        str_enum(MatchCheckInStatus, "match_check_in_status"),
         default=MatchCheckInStatus.NOT_OPEN,
         nullable=False,
         index=True,

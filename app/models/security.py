@@ -29,7 +29,7 @@ from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.base import Base, BaseModel
-from app.database.types import PortableJSONB
+from app.database.types import PortableJSONB, str_enum
 
 
 # ---------------------------------------------------------------------------
@@ -156,10 +156,10 @@ class SecurityEvent(Base):
         PG_UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
     )
     event_type: Mapped[SecurityEventType] = mapped_column(
-        Enum(SecurityEventType, name="security_event_type"), nullable=False
+        str_enum(SecurityEventType, "security_event_type"), nullable=False
     )
     severity: Mapped[SecurityEventSeverity] = mapped_column(
-        Enum(SecurityEventSeverity, name="security_event_severity"),
+        str_enum(SecurityEventSeverity, "security_event_severity"),
         nullable=False,
         default=SecurityEventSeverity.LOW,
     )
@@ -234,9 +234,9 @@ class FraudFlag(BaseModel):
     user_id: Mapped[uuid.UUID] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    flag_type: Mapped[FraudFlagType] = mapped_column(Enum(FraudFlagType, name="fraud_flag_type"), nullable=False)
+    flag_type: Mapped[FraudFlagType] = mapped_column(str_enum(FraudFlagType, "fraud_flag_type"), nullable=False)
     status: Mapped[FraudFlagStatus] = mapped_column(
-        Enum(FraudFlagStatus, name="fraud_flag_status"), nullable=False, default=FraudFlagStatus.OPEN
+        str_enum(FraudFlagStatus, "fraud_flag_status"), nullable=False, default=FraudFlagStatus.OPEN
     )
     risk_score: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
@@ -276,10 +276,10 @@ class AnalyticsSnapshot(BaseModel):
     )
 
     metric_type: Mapped[AnalyticsMetricType] = mapped_column(
-        Enum(AnalyticsMetricType, name="analytics_metric_type"), nullable=False
+        str_enum(AnalyticsMetricType, "analytics_metric_type"), nullable=False
     )
     period_type: Mapped[AnalyticsPeriodType] = mapped_column(
-        Enum(AnalyticsPeriodType, name="analytics_period_type"), nullable=False
+        str_enum(AnalyticsPeriodType, "analytics_period_type"), nullable=False
     )
     period_start: Mapped[date] = mapped_column(Date, nullable=False)
     period_end: Mapped[date] = mapped_column(Date, nullable=False)

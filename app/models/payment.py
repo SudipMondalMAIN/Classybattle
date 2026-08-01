@@ -39,7 +39,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
 from app.database.base import Base, BaseModel
-from app.database.types import PortableJSONB
+from app.database.types import PortableJSONB, str_enum
 
 
 class PaymentProvider(str, enum.Enum):
@@ -130,7 +130,7 @@ class PaymentRequest(BaseModel):
     )
 
     provider: Mapped[PaymentProvider] = mapped_column(
-        Enum(PaymentProvider, name="payment_provider"),
+        str_enum(PaymentProvider, "payment_provider"),
         default=PaymentProvider.MANUAL_UPI,
         server_default=PaymentProvider.MANUAL_UPI.value,
         nullable=False,
@@ -155,7 +155,7 @@ class PaymentRequest(BaseModel):
     provider_reference: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
 
     status: Mapped[PaymentRequestStatus] = mapped_column(
-        Enum(PaymentRequestStatus, name="payment_request_status"),
+        str_enum(PaymentRequestStatus, "payment_request_status"),
         default=PaymentRequestStatus.PENDING,
         server_default=PaymentRequestStatus.PENDING.value,
         nullable=False,
@@ -171,7 +171,7 @@ class PaymentRequest(BaseModel):
     verified_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     rejection_reason: Mapped[Optional[PaymentRejectionReason]] = mapped_column(
-        Enum(PaymentRejectionReason, name="payment_rejection_reason"), nullable=True
+        str_enum(PaymentRejectionReason, "payment_rejection_reason"), nullable=True
     )
     rejection_note: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     admin_note: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)

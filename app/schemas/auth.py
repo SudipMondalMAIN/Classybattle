@@ -8,21 +8,28 @@ from pydantic import BaseModel, EmailStr, Field, field_validator
 from app.core.password_policy import validate_password_strength
 from app.schemas.user import UserRead
 
-PHONE_REGEX = re.compile(r"^\+?[1-9]\d{7,14}$")
+PHONE_DIGITS_RE = re.compile(r"\D")
 
 
 class SignupRequest(BaseModel):
-    full_name: str = Field(..., min_length=2, max_length=150)
+    full_name: str = Field(..., min_length=1, max_length=150)
     email: EmailStr
-    phone_number: str = Field(..., min_length=8, max_length=20)
-    password: str = Field(..., min_length=8, max_length=128)
+    phone_number: str = Field(..., min_length=1, max_length=20)
+    password: str = Field(..., min_length=1, max_length=128)
 
     @field_validator("phone_number")
     @classmethod
     def validate_phone(cls, v: str) -> str:
-        if not PHONE_REGEX.match(v):
-            raise ValueError("Invalid phone number format. Use E.164 format e.g. +919876543210")
-        return v
+        digits = PHONE_DIGITS_RE.sub("", v)
+        # Strip an already-included country code (91) or leading trunk 0,
+        # so the user only ever needs to type the plain 10-digit number.
+        if len(digits) == 12 and digits.startswith("91"):
+            digits = digits[2:]
+        elif len(digits) == 11 and digits.startswith("0"):
+            digits = digits[1:]
+        if len(digits) != 10:
+            raise ValueError("Enter a valid 10-digit phone number (no country code needed)")
+        return f"+91{digits}"
 
     @field_validator("password")
     @classmethod
@@ -80,7 +87,7 @@ class VerifyResetOTPRequest(BaseModel):
 class ResetPasswordRequest(BaseModel):
     email: EmailStr
     otp: str = Field(..., min_length=4, max_length=8)
-    new_password: str = Field(..., min_length=8, max_length=128)
+    new_password: str = Field(..., min_length=1, max_length=128)
 
     @field_validator("new_password")
     @classmethod

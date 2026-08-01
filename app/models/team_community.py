@@ -28,7 +28,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.base import BaseModel
-from app.database.types import PortableJSONB
+from app.database.types import PortableJSONB, str_enum
 
 
 class TeamInvitationStatus(str, enum.Enum):
@@ -102,7 +102,7 @@ class TeamInvitation(BaseModel):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
     status: Mapped[TeamInvitationStatus] = mapped_column(
-        Enum(TeamInvitationStatus, name="team_invitation_status"),
+        str_enum(TeamInvitationStatus, "team_invitation_status"),
         default=TeamInvitationStatus.PENDING,
         server_default=TeamInvitationStatus.PENDING.value,
         nullable=False,
@@ -140,7 +140,7 @@ class TeamJoinRequest(BaseModel):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
     status: Mapped[TeamJoinRequestStatus] = mapped_column(
-        Enum(TeamJoinRequestStatus, name="team_join_request_status"),
+        str_enum(TeamJoinRequestStatus, "team_join_request_status"),
         default=TeamJoinRequestStatus.PENDING,
         server_default=TeamJoinRequestStatus.PENDING.value,
         nullable=False,
@@ -204,7 +204,7 @@ class TeamActivityFeedEntry(BaseModel):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
     )
     activity_type: Mapped[TeamActivityType] = mapped_column(
-        Enum(TeamActivityType, name="team_activity_type"), nullable=False, index=True
+        str_enum(TeamActivityType, "team_activity_type"), nullable=False, index=True
     )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     meta_data: Mapped[Optional[dict]] = mapped_column(PortableJSONB, nullable=True)

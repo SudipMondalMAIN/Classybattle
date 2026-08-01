@@ -11,7 +11,7 @@ from app.models.user import UserRole, UserStatus
 
 
 class UserProfileUpdate(BaseModel):
-    full_name: Optional[str] = Field(None, min_length=2, max_length=150)
+    full_name: Optional[str] = Field(None, min_length=1, max_length=150)
     country: Optional[str] = Field(None, max_length=100)
     avatar_id: Optional[str] = Field(None, max_length=50)
     bio: Optional[str] = Field(None, max_length=500)
@@ -24,6 +24,7 @@ class UserRead(BaseModel):
     full_name: str
     email: EmailStr
     phone_number: str
+    player_uid: str
     role: UserRole
     status: UserStatus
     is_email_verified: bool
@@ -41,4 +42,5 @@ class UserPublic(BaseModel):
 
     id: UUID
     full_name: str
+    player_uid: str
     avatar_id: Optional[str] = None

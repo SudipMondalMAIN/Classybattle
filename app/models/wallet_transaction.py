@@ -29,7 +29,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
 from app.database.base import Base
-from app.database.types import PortableJSONB
+from app.database.types import PortableJSONB, str_enum
 
 
 class WalletTransactionType(str, enum.Enum):
@@ -77,10 +77,10 @@ class WalletTransaction(Base):
     )
 
     type: Mapped[WalletTransactionType] = mapped_column(
-        Enum(WalletTransactionType, name="wallet_transaction_type"), nullable=False, index=True
+        str_enum(WalletTransactionType, "wallet_transaction_type"), nullable=False, index=True
     )
     status: Mapped[WalletTransactionStatus] = mapped_column(
-        Enum(WalletTransactionStatus, name="wallet_transaction_status"),
+        str_enum(WalletTransactionStatus, "wallet_transaction_status"),
         default=WalletTransactionStatus.SUCCESS,
         nullable=False,
         index=True,

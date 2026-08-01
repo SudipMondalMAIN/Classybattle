@@ -22,7 +22,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.base import BaseModel
-from app.database.types import PortableJSONB
+from app.database.types import PortableJSONB, str_enum
 
 
 class ProfileVisibility(str, enum.Enum):
@@ -65,7 +65,7 @@ class PlayerProfile(BaseModel):
     cover_image_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
 
     visibility: Mapped[ProfileVisibility] = mapped_column(
-        Enum(ProfileVisibility, name="profile_visibility"),
+        str_enum(ProfileVisibility, "profile_visibility"),
         default=ProfileVisibility.PUBLIC,
         server_default=ProfileVisibility.PUBLIC.value,
         nullable=False,
@@ -106,7 +106,7 @@ class Friendship(BaseModel):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
     status: Mapped[FriendshipStatus] = mapped_column(
-        Enum(FriendshipStatus, name="friendship_status"),
+        str_enum(FriendshipStatus, "friendship_status"),
         default=FriendshipStatus.PENDING,
         server_default=FriendshipStatus.PENDING.value,
         nullable=False,
@@ -157,7 +157,7 @@ class ActivityFeedEntry(BaseModel):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
     activity_type: Mapped[ActivityType] = mapped_column(
-        Enum(ActivityType, name="activity_type"), nullable=False, index=True
+        str_enum(ActivityType, "activity_type"), nullable=False, index=True
     )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     meta_data: Mapped[Optional[dict]] = mapped_column(PortableJSONB, nullable=True)

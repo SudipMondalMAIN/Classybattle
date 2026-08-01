@@ -25,6 +25,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.base import BaseModel
+from app.database.types import str_enum
 
 
 class WinnerAssignmentSource(str, enum.Enum):
@@ -80,7 +81,7 @@ class MatchWinner(BaseModel):
     is_tie: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     assignment_source: Mapped[WinnerAssignmentSource] = mapped_column(
-        Enum(WinnerAssignmentSource, name="winner_assignment_source"),
+        str_enum(WinnerAssignmentSource, "winner_assignment_source"),
         default=WinnerAssignmentSource.AUTOMATIC,
         nullable=False,
     )

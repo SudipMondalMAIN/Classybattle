@@ -23,6 +23,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.base import BaseModel
+from app.database.types import str_enum
 
 
 class TournamentStatus(str, enum.Enum):
@@ -152,13 +153,13 @@ class Tournament(BaseModel):
     tournament_end: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     status: Mapped[TournamentStatus] = mapped_column(
-        Enum(TournamentStatus, name="tournament_status"),
+        str_enum(TournamentStatus, "tournament_status"),
         default=TournamentStatus.DRAFT,
         nullable=False,
         index=True,
     )
     visibility: Mapped[TournamentVisibility] = mapped_column(
-        Enum(TournamentVisibility, name="tournament_visibility"),
+        str_enum(TournamentVisibility, "tournament_visibility"),
         default=TournamentVisibility.PUBLIC,
         nullable=False,
     )
@@ -168,7 +169,7 @@ class Tournament(BaseModel):
     # Team registration settings (Phase 6).
     # ------------------------------------------------------------------
     registration_mode: Mapped[TeamRegistrationMode] = mapped_column(
-        Enum(TeamRegistrationMode, name="tournament_registration_mode"),
+        str_enum(TeamRegistrationMode, "tournament_registration_mode"),
         default=TeamRegistrationMode.SOLO,
         nullable=False,
     )

@@ -26,7 +26,7 @@ from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.base import BaseModel
-from app.database.types import PortableJSONB
+from app.database.types import PortableJSONB, str_enum
 
 
 class BadgeTier(str, enum.Enum):
@@ -68,7 +68,7 @@ class Badge(BaseModel):
     description: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     icon_url: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)
     tier: Mapped[BadgeTier] = mapped_column(
-        Enum(BadgeTier, name="badge_tier"), default=BadgeTier.BRONZE, nullable=False
+        str_enum(BadgeTier, "badge_tier"), default=BadgeTier.BRONZE, nullable=False
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
@@ -94,10 +94,10 @@ class Achievement(BaseModel):
         PGUUID(as_uuid=True), ForeignKey("badges.id", ondelete="CASCADE"), nullable=False, index=True
     )
     trigger_type: Mapped[AchievementTriggerType] = mapped_column(
-        Enum(AchievementTriggerType, name="achievement_trigger_type"), nullable=False, index=True
+        str_enum(AchievementTriggerType, "achievement_trigger_type"), nullable=False, index=True
     )
     comparison: Mapped[AchievementComparison] = mapped_column(
-        Enum(AchievementComparison, name="achievement_comparison"),
+        str_enum(AchievementComparison, "achievement_comparison"),
         default=AchievementComparison.GTE,
         nullable=False,
     )

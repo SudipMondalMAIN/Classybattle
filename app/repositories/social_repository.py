@@ -64,6 +64,7 @@ class PlayerProfileRepository(BaseRepository[PlayerProfile]):
             search_filter = or_(
                 func.lower(User.full_name).like(like),
                 func.lower(PlayerProfile.display_name).like(like),
+                func.lower(User.player_uid).like(like),
             )
             stmt = stmt.where(search_filter)
             count_stmt = count_stmt.where(search_filter)

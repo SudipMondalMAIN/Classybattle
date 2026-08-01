@@ -15,6 +15,7 @@ from app.core.exceptions import (
     UnauthorizedException,
 )
 from app.core.logging import get_logger
+from app.core.player_uid import generate_player_uid
 from app.core.security import (
     TokenType,
     create_access_token,
@@ -42,6 +43,14 @@ class AuthService:
         self.user_repo = UserRepository(session)
         self.refresh_token_repo = RefreshTokenRepository(session)
         self.otp_service = OTPService(session)
+
+    async def _generate_unique_player_uid(self) -> str:
+        """Generate a player_uid, retrying on the rare collision."""
+        for _ in range(10):
+            candidate = generate_player_uid()
+            if await self.user_repo.get_by_player_uid(candidate) is None:
+                return candidate
+        raise RuntimeError("Could not generate a unique player UID after 10 attempts")
 
     # ------------------------------------------------------------------
     # SIGNUP
@@ -74,6 +83,7 @@ class AuthService:
                 role=UserRole.USER,
                 is_email_verified=False,
                 is_active=True,
+                player_uid=await self._generate_unique_player_uid(),
             )
 
         await self.session.commit()

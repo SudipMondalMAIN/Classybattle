@@ -8,6 +8,7 @@ from sqlalchemy import Boolean, DateTime, Enum, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database.base import BaseModel
+from app.database.types import str_enum
 
 
 class OTPPurpose(str, enum.Enum):
@@ -20,7 +21,7 @@ class OTP(BaseModel):
 
     email: Mapped[str] = mapped_column(String(255), index=True, nullable=False)
     otp_hash: Mapped[str] = mapped_column(String(255), nullable=False)
-    purpose: Mapped[OTPPurpose] = mapped_column(Enum(OTPPurpose, name="otp_purpose"), nullable=False)
+    purpose: Mapped[OTPPurpose] = mapped_column(str_enum(OTPPurpose, "otp_purpose"), nullable=False)
 
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)

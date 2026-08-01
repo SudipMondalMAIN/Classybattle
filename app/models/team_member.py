@@ -11,6 +11,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.base import BaseModel
+from app.database.types import str_enum
 
 
 class TeamMemberRole(str, enum.Enum):
@@ -48,7 +49,7 @@ class TeamMember(BaseModel):
     )
 
     role: Mapped[TeamMemberRole] = mapped_column(
-        Enum(TeamMemberRole, name="team_member_role"),
+        str_enum(TeamMemberRole, "team_member_role"),
         default=TeamMemberRole.MEMBER,
         nullable=False,
     )

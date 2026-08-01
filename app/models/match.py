@@ -22,6 +22,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.base import BaseModel
+from app.database.types import str_enum
 
 
 class MatchStatus(str, enum.Enum):
@@ -118,7 +119,7 @@ class Match(BaseModel):
     room_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     room_password: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     room_status: Mapped[RoomStatus] = mapped_column(
-        Enum(RoomStatus, name="match_room_status"),
+        str_enum(RoomStatus, "match_room_status"),
         default=RoomStatus.NOT_CREATED,
         nullable=False,
         index=True,
@@ -128,7 +129,7 @@ class Match(BaseModel):
     )
 
     match_status: Mapped[MatchStatus] = mapped_column(
-        Enum(MatchStatus, name="match_status"),
+        str_enum(MatchStatus, "match_status"),
         default=MatchStatus.DRAFT,
         nullable=False,
         index=True,
