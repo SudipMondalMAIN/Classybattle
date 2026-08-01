@@ -3,6 +3,25 @@ Import every model here so Alembic's autogenerate can discover them
 via Base.metadata.
 """
 from app.database.base import Base
+from app.models.achievement import (
+    Achievement,
+    AchievementComparison,
+    AchievementTriggerType,
+    Badge,
+    BadgeTier,
+    UserAchievement,
+)
+from app.models.moderation import (
+    Appeal,
+    AppealStatus,
+    ModerationAction,
+    ModerationActionStatus,
+    ModerationActionType,
+    Report,
+    ReportReason,
+    ReportStatus,
+    ReportTargetType,
+)
 from app.models.audit_log import AuditAction, AuditActorType, AuditLog
 from app.models.device_token import DeviceToken
 from app.models.idempotency_key import IdempotencyKey, IdempotencyKeyStatus
@@ -189,4 +208,19 @@ __all__ = [
     "TeamActivityFeedEntry",
     "TeamActivityType",
     "MEMBER_HISTORY_ACTIVITY_TYPES",
+    "Achievement",
+    "AchievementComparison",
+    "AchievementTriggerType",
+    "Badge",
+    "BadgeTier",
+    "UserAchievement",
+    "Appeal",
+    "AppealStatus",
+    "ModerationAction",
+    "ModerationActionStatus",
+    "ModerationActionType",
+    "Report",
+    "ReportReason",
+    "ReportStatus",
+    "ReportTargetType",
 ]

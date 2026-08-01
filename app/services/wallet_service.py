@@ -261,6 +261,22 @@ class WalletService:
                 )
             except Exception:  # noqa: BLE001
                 pass
+
+            # Phase 15C: automatic WALLET_MILESTONE achievement evaluation,
+            # keyed on the wallet's post-credit available balance.
+            try:
+                from app.models.achievement import AchievementTriggerType
+                from app.services.achievement_service import AchievementService
+
+                wallet = await self.wallet_repo.get_by_user_id(user.id)
+                if wallet is not None:
+                    await AchievementService(self.session).evaluate(
+                        user_id=user.id,
+                        trigger_type=AchievementTriggerType.WALLET_MILESTONE,
+                        metric_value=wallet.available_balance,
+                    )
+            except Exception:  # noqa: BLE001
+                pass
         return txn
 
     async def debit(

@@ -71,6 +71,7 @@ from app.repositories.match_participant_repository import MatchParticipantReposi
 from app.repositories.participant_repository import ParticipantRepository
 from app.repositories.team_member_repository import TeamMemberRepository
 from app.services.audit_service import AuditService
+from app.models.achievement import AchievementTriggerType
 
 _WIN_WEIGHT = Decimal("10")
 _KILL_WEIGHT = Decimal("2")
@@ -222,6 +223,40 @@ class LeaderboardService:
             description=f"Leaderboard statistics updated for match {match.id}",
         )
         await self.session.commit()
+
+        # Phase 15C: automatic MATCH_WIN / MVP achievement evaluation.
+        # Runs after the statistics transaction has committed so
+        # achievement unlocks (which commit independently) never
+        # interleave with in-progress leaderboard mutations.
+        touched_user_ids: set = set()
+        for slot in slots:
+            if slot.participant_id and slot.participant is not None:
+                touched_user_ids.add(slot.participant.user_id)
+            if slot.team_id is not None:
+                members = await self.team_member_repo.list_for_team(slot.team_id)
+                for member in members:
+                    touched_user_ids.add(member.user_id)
+        for user_id in touched_user_ids:
+            stats = await self.player_stats_repo.get_by_user_id(user_id)
+            if stats is None:
+                continue
+            await self._evaluate_achievements(
+                user_id, AchievementTriggerType.MATCH_WIN, stats.matches_won
+            )
+            await self._evaluate_achievements(user_id, AchievementTriggerType.MVP, stats.mvp_count)
+
+    async def _evaluate_achievements(self, user_id: UUID, trigger_type, metric_value) -> None:
+        """Best-effort hook into Phase 15C automatic achievement unlocks.
+        Local import avoids a circular import between LeaderboardService
+        and AchievementService."""
+        try:
+            from app.services.achievement_service import AchievementService
+
+            await AchievementService(self.session).evaluate(
+                user_id=user_id, trigger_type=trigger_type, metric_value=metric_value
+            )
+        except Exception:  # noqa: BLE001 - achievements must never break callers
+            pass
 
     async def _captain_user_participant(self, team_id: UUID) -> Optional[UUID]:
         members = await self.team_member_repo.list_for_team(team_id)
@@ -404,6 +439,10 @@ class LeaderboardService:
         await self.update_log_repo.mark(LeaderboardSourceEvent.PRIZE_CREDITED, source_id)
         await self.session.commit()
 
+        await self._evaluate_achievements(
+            user_id, AchievementTriggerType.PRIZE_MILESTONE, new_prize
+        )
+
     # ------------------------------------------------------------------
     # 3. Tournament completion -> tournaments played/won
     # ------------------------------------------------------------------
@@ -454,11 +493,23 @@ class LeaderboardService:
         await self.update_log_repo.mark(LeaderboardSourceEvent.TOURNAMENT_COMPLETED, source_id)
         await self.session.commit()
 
+        for user_id in set(participant_user_ids):
+            stats = await self.player_stats_repo.get_by_user_id(user_id)
+            if stats is None:
+                continue
+            await self._evaluate_achievements(
+                user_id, AchievementTriggerType.TOURNAMENT_PARTICIPATION, stats.tournaments_played
+            )
+            await self._evaluate_achievements(
+                user_id, AchievementTriggerType.TOURNAMENT_WIN, stats.tournaments_won
+            )
+
     # ------------------------------------------------------------------
     # 4. Rank recomputation + rank-change tracking
     # ------------------------------------------------------------------
     async def recompute_global_ranks(self) -> None:
         players = await self.player_stats_repo.list_all_ordered()
+        improved_user_ids: list = []
         for idx, p in enumerate(players, start=1):
             if p.current_rank != idx:
                 old_rank = p.current_rank
@@ -472,6 +523,8 @@ class LeaderboardService:
                     ranking_score=p.ranking_score,
                     source_event=LeaderboardSourceEvent.MANUAL_RECOMPUTE,
                 )
+                if old_rank is None or idx < old_rank:
+                    improved_user_ids.append((p.user_id, idx))
 
         teams = await self.team_stats_repo.list_all_ordered()
         for idx, t in enumerate(teams, start=1):
@@ -495,6 +548,9 @@ class LeaderboardService:
             description="Global player/team ranks recomputed",
         )
         await self.session.commit()
+
+        for user_id, new_rank in improved_user_ids:
+            await self._evaluate_achievements(user_id, AchievementTriggerType.RANKING, new_rank)
 
     async def recompute_period_ranks(self, period_type: LeaderboardPeriodType, period_key: str) -> None:
         rows = await self.player_period_repo.list_for_period_ordered(period_type, period_key)
