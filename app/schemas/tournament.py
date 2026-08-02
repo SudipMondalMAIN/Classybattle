@@ -14,6 +14,7 @@ from app.models.tournament import TeamRegistrationMode, TournamentStatus, Tourna
 class TournamentCreate(BaseModel):
     title: str = Field(..., min_length=3, max_length=200)
     description: Optional[str] = Field(None, max_length=5000)
+    rules: Optional[str] = Field(None, max_length=5000)
     game_id: UUID
     mode_id: Optional[UUID] = None
     map_id: Optional[UUID] = None
@@ -51,6 +52,7 @@ class TournamentCreate(BaseModel):
 class TournamentUpdate(BaseModel):
     title: Optional[str] = Field(None, min_length=3, max_length=200)
     description: Optional[str] = Field(None, max_length=5000)
+    rules: Optional[str] = Field(None, max_length=5000)
     mode_id: Optional[UUID] = None
     map_id: Optional[UUID] = None
     organizer: Optional[str] = Field(None, min_length=2, max_length=150)
@@ -82,6 +84,7 @@ class TournamentRead(BaseModel):
     title: str
     slug: str
     description: Optional[str] = None
+    rules: Optional[str] = None
     game_id: UUID
     mode_id: Optional[UUID] = None
     map_id: Optional[UUID] = None

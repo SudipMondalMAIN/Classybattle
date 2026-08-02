@@ -111,6 +111,7 @@ class Tournament(BaseModel):
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     slug: Mapped[str] = mapped_column(String(230), unique=True, index=True, nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    rules: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     game_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),

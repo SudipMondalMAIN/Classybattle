@@ -162,6 +162,7 @@ class TournamentService:
             title=payload.title,
             slug=slug,
             description=payload.description,
+            rules=payload.rules,
             game_id=payload.game_id,
             mode_id=payload.mode_id,
             map_id=payload.map_id,
