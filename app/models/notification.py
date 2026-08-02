@@ -41,6 +41,7 @@ class NotificationEventType(str, enum.Enum):
     MATCH_CREATED = "match_created"
     MATCH_STARTED = "match_started"
     MATCH_COMPLETED = "match_completed"
+    ROOM_DETAILS_PUBLISHED = "room_details_published"
     LIVE_MATCH_STARTED = "live_match_started"
     MATCH_RESULT_APPROVED = "match_result_approved"
     WINNER_DECLARED = "winner_declared"

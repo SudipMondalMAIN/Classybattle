@@ -5,9 +5,15 @@ from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 from app.models.user import UserRole, UserStatus
+
+# Fixed set of avatars bundled inside the Flutter app
+# (assets/avatars/avatar_1.png ... avatar_6.png). No custom photo upload —
+# user only picks one of these six. Add/remove entries here if the set
+# ever changes; nothing else needs to change.
+VALID_AVATAR_IDS = {"avatar_1", "avatar_2", "avatar_3", "avatar_4", "avatar_5", "avatar_6"}
 
 
 class UserProfileUpdate(BaseModel):
@@ -15,6 +21,13 @@ class UserProfileUpdate(BaseModel):
     country: Optional[str] = Field(None, max_length=100)
     avatar_id: Optional[str] = Field(None, max_length=50)
     bio: Optional[str] = Field(None, max_length=500)
+
+    @field_validator("avatar_id")
+    @classmethod
+    def validate_avatar_id(cls, value: Optional[str]) -> Optional[str]:
+        if value is not None and value not in VALID_AVATAR_IDS:
+            raise ValueError(f"avatar_id must be one of: {', '.join(sorted(VALID_AVATAR_IDS))}")
+        return value
 
 
 class UserRead(BaseModel):

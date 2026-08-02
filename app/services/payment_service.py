@@ -398,6 +398,7 @@ class PaymentService:
                 title="Deposit approved",
                 body=f"Your deposit of ₹{payment_request.amount} has been approved and credited.",
                 event_key=f"payment_approved:{payment_request.id}",
+                send_email=True,
             )
         except Exception:  # noqa: BLE001
             pass
@@ -462,6 +463,7 @@ class PaymentService:
                     f"({reason.value.replace('_', ' ')})."
                 ),
                 event_key=f"payment_rejected:{payment_request.id}",
+                send_email=True,
             )
         except Exception:  # noqa: BLE001
             pass

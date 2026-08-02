@@ -12,8 +12,10 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BadRequestException, ConflictException, NotFoundException
+from app.models.notification import NotificationEventType
 from app.models.user import User
 from app.models.withdrawal import WithdrawalRequest, WithdrawalStatus
+from app.notifications.dispatch_service import NotificationDispatchService
 from app.schemas.withdrawal import WithdrawalRequestCreate
 from app.services.payment_method_service import PaymentMethodService
 from app.services.wallet_service import WalletService
@@ -61,6 +63,19 @@ class WithdrawalService:
         withdrawal.hold_transaction_id = hold_txn.id
         await self.session.commit()
         await self.session.refresh(withdrawal)
+
+        try:
+            await NotificationDispatchService(self.session).dispatch(
+                user=user,
+                event_type=NotificationEventType.WALLET_DEBITED,
+                title="Withdrawal requested",
+                body=f"Your withdrawal request of ₹{withdrawal.amount} has been submitted and is pending review.",
+                event_key=f"withdrawal_requested:{withdrawal.id}",
+                send_email=True,
+            )
+        except Exception:  # noqa: BLE001 - never block the request itself
+            pass
+
         return withdrawal
 
     async def get_owned(self, user: User, withdrawal_id: UUID) -> WithdrawalRequest:
@@ -172,4 +187,26 @@ class WithdrawalService:
 
         await self.session.commit()
         await self.session.refresh(withdrawal)
+
+        try:
+            if capture:
+                title = "Withdrawal paid"
+                body = f"₹{withdrawal.amount} has been sent to your {withdrawal.method_type.value.upper()} account."
+                event_type = NotificationEventType.WALLET_DEBITED
+            else:
+                title = "Withdrawal cancelled"
+                body = f"Your withdrawal of ₹{withdrawal.amount} was cancelled and refunded to your wallet."
+                event_type = NotificationEventType.REFUND_COMPLETED
+
+            await NotificationDispatchService(self.session).dispatch(
+                user=owner,
+                event_type=event_type,
+                title=title,
+                body=body,
+                event_key=f"withdrawal_settled:{withdrawal.id}",
+                send_email=True,
+            )
+        except Exception:  # noqa: BLE001 - never block the settlement itself
+            pass
+
         return withdrawal

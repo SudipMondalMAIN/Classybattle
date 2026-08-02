@@ -477,6 +477,30 @@ class MatchService:
         )
         await self.session.commit()
         await self.session.refresh(match)
+
+        try:
+            from app.models.notification import NotificationEventType
+            from app.notifications.dispatch_service import NotificationDispatchService
+            from app.repositories.participant_repository import ParticipantRepository
+
+            participants = await ParticipantRepository(
+                self.session
+            ).list_active_for_tournament_all(tournament.id)
+            users = [p.user for p in participants if p.user is not None]
+            if users:
+                await NotificationDispatchService(self.session).dispatch_bulk(
+                    users=users,
+                    event_type=NotificationEventType.ROOM_DETAILS_PUBLISHED,
+                    title="Room ID & Password ready",
+                    body=(
+                        f"Room details for match {match.match_number} "
+                        f"(round {match.round_number}) are now available. Check the app to join."
+                    ),
+                    event_key_prefix=f"room_published:{match.id}",
+                )
+        except Exception:  # noqa: BLE001 - never block room publishing
+            pass
+
         return match
 
     async def hide_room(self, match_id: UUID, current_user: User) -> Match:
