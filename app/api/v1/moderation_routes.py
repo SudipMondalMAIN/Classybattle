@@ -95,6 +95,19 @@ async def admin_get_report(
     return ReportRead.model_validate(report)
 
 
+@router.get("/admin/reports/{report_id}/shared-history")
+async def admin_get_report_shared_history(
+    report_id: UUID,
+    _admin: User = Depends(require_admin),
+    session: AsyncSession = Depends(get_db_session),
+):
+    """Confirms whether the reporter and the reported player actually
+    shared a tournament, so admins can sanity-check a report before
+    taking action on it."""
+    service = ModerationService(session)
+    return await service.get_report_context(report_id)
+
+
 @router.patch("/admin/reports/{report_id}/review", response_model=ReportRead)
 async def admin_review_report(
     report_id: UUID,

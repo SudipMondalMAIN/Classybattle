@@ -54,6 +54,43 @@ class ModerationService:
         self.user_repo = UserRepository(session)
         self.audit = AuditService(session)
 
+    async def get_report_context(self, report_id: UUID) -> dict:
+        """
+        Admin-only helper: given a report, confirms whether the reporter
+        and the reported player have actually shared a tournament (i.e.
+        genuinely played together) — surfaced alongside the report so an
+        admin can sanity-check the complaint before acting on it. Only
+        meaningful for target_type == PLAYER; other target types return
+        an empty list.
+        """
+        from app.models.moderation import ReportTargetType
+        from app.repositories.participant_repository import ParticipantRepository
+
+        report = await self.report_repo.get_by_id(report_id)
+        if report is None:
+            raise NotFoundException("Report not found")
+
+        shared: list[dict] = []
+        if report.target_type == ReportTargetType.PLAYER:
+            pairs = await ParticipantRepository(self.session).list_shared_tournaments(
+                report.reporter_id, report.target_id
+            )
+            for participant_a, participant_b in pairs:
+                shared.append(
+                    {
+                        "tournament_id": participant_a.tournament_id,
+                        "reporter_status": participant_a.status,
+                        "target_status": participant_b.status,
+                    }
+                )
+
+        return {
+            "report_id": report.id,
+            "target_type": report.target_type,
+            "played_together": len(shared) > 0,
+            "shared_tournaments": shared,
+        }
+
     # ------------------------------------------------------------------
     # Reports (Player / Team / Match — unified, polymorphic target)
     # ------------------------------------------------------------------

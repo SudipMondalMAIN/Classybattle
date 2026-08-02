@@ -6,6 +6,7 @@ from uuid import UUID
 
 from sqlalchemy import String, asc, cast, desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from app.models.participant import Participant, ParticipantStatus
 from app.repositories.base import BaseRepository
@@ -146,3 +147,25 @@ class ParticipantRepository(BaseRepository[Participant]):
         )
         result = await self.session.execute(stmt)
         return result.scalars().all(), total
+
+    async def list_shared_tournaments(self, user_id_a: UUID, user_id_b: UUID):
+        """
+        Returns (participant_a, participant_b) pairs for every tournament
+        both users registered for — used by admins to verify whether a
+        reporter and a reported player actually played together before
+        acting on a report.
+        """
+        pa = aliased(Participant)
+        pb = aliased(Participant)
+        stmt = (
+            select(pa, pb)
+            .join(pb, pb.tournament_id == pa.tournament_id)
+            .where(
+                pa.user_id == user_id_a,
+                pb.user_id == user_id_b,
+                pa.deleted_at.is_(None),
+                pb.deleted_at.is_(None),
+            )
+        )
+        result = await self.session.execute(stmt)
+        return result.all()
