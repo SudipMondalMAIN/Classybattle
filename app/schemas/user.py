@@ -44,3 +44,11 @@ class UserPublic(BaseModel):
     full_name: str
     player_uid: str
     avatar_id: Optional[str] = None
+
+
+class PaginatedAdminUsers(BaseModel):
+    items: list[UserRead]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int

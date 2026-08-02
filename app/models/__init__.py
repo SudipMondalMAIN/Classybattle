@@ -78,6 +78,8 @@ from app.models.payment import (
     PaymentRequestStatus,
     PaymentSettings,
 )
+from app.models.payment_method import PaymentMethod, PaymentMethodType
+from app.models.withdrawal import WithdrawalRequest, WithdrawalStatus
 from app.models.participant import (
     Participant,
     ParticipantPaymentStatus,
@@ -259,4 +261,8 @@ __all__ = [
     "PaymentProvider",
     "PaymentRequestStatus",
     "PaymentRejectionReason",
+    "PaymentMethod",
+    "PaymentMethodType",
+    "WithdrawalRequest",
+    "WithdrawalStatus",
 ]

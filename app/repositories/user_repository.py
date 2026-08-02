@@ -2,8 +2,9 @@
 User repository — user-specific queries.
 """
 from typing import Optional
+from uuid import UUID
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import User
@@ -42,3 +43,39 @@ class UserRepository(BaseRepository[User]):
         )
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
+
+    async def search_paginated(
+        self, *, query: Optional[str], page: int, page_size: int
+    ) -> tuple[list[User], int]:
+        """
+        Admin-only search across email, phone number, player_uid, and id (UUID).
+        Matches are partial/case-insensitive for text fields; the id filter
+        only applies when `query` parses as a valid UUID.
+        """
+        stmt = select(User).where(User.deleted_at.is_(None))
+        count_stmt = select(func.count(User.id)).where(User.deleted_at.is_(None))
+
+        if query:
+            q = query.strip()
+            like = f"%{q.lower()}%"
+            conditions = [
+                func.lower(User.email).like(like),
+                func.lower(User.phone_number).like(like),
+                func.lower(User.player_uid).like(like),
+                func.lower(User.full_name).like(like),
+            ]
+            try:
+                as_uuid = UUID(q)
+                conditions.append(User.id == as_uuid)
+            except ValueError:
+                pass
+
+            search_filter = or_(*conditions)
+            stmt = stmt.where(search_filter)
+            count_stmt = count_stmt.where(search_filter)
+
+        stmt = stmt.order_by(User.created_at.desc()).offset((page - 1) * page_size).limit(page_size)
+
+        total = (await self.session.execute(count_stmt)).scalar_one()
+        rows = (await self.session.execute(stmt)).scalars().all()
+        return list(rows), total

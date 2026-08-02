@@ -27,6 +27,15 @@ class ProfileSettingsUpdate(BaseModel):
     show_stats: Optional[bool] = None
 
 
+class GameProfileSummary(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    game_id: UUID
+    game_name: str
+    game_slug: str
+    data: dict = Field(default_factory=dict, description='e.g. {"nickname": "...", "uid": "..."}')
+
+
 class PublicUserSummary(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -34,6 +43,15 @@ class PublicUserSummary(BaseModel):
     full_name: str
     player_uid: str
     country: Optional[str] = None
+    game_profiles: list[GameProfileSummary] = Field(default_factory=list)
+
+
+class PrivateUserSummary(PublicUserSummary):
+    """Same as PublicUserSummary but also includes contact details —
+    only ever used for the viewer's own profile (/profiles/me)."""
+
+    email: str
+    phone_number: str
 
 
 class PlayerStatsSummary(BaseModel):

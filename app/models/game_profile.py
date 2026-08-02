@@ -33,7 +33,7 @@ class UserGameProfile(BaseModel):
     data: Mapped[dict[str, Any]] = mapped_column(PortableJSONB, default=dict, nullable=False)
 
     user: Mapped["User"] = relationship(back_populates="game_profiles")
-    game: Mapped["Game"] = relationship(back_populates="game_profiles")
+    game: Mapped["Game"] = relationship(back_populates="game_profiles", lazy="selectin")
 
     def __repr__(self) -> str:
         return f"<UserGameProfile user_id={self.user_id} game_id={self.game_id}>"

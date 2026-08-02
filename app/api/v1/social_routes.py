@@ -25,7 +25,9 @@ from app.schemas.social import (
     PaginatedFriends,
     PaginatedProfiles,
     PaginatedUsers,
+    GameProfileSummary,
     PlayerStatsSummary,
+    PrivateUserSummary,
     ProfilePrivateRead,
     ProfileRead,
     ProfileSettingsUpdate,
@@ -65,7 +67,14 @@ async def get_optional_current_user(
 
 
 async def _build_profile_read(
-    profile, target_user: User, relationship: str, session: AsyncSession, viewer: Optional[User], model_cls
+    profile,
+    target_user: User,
+    relationship: str,
+    session: AsyncSession,
+    viewer: Optional[User],
+    model_cls,
+    *,
+    reveal_contact: bool = False,
 ):
     stats_summary = None
     if profile.show_stats:
@@ -85,8 +94,23 @@ async def _build_profile_read(
 
     is_following = await FollowService(session).repo.get(viewer.id, target_user.id) if viewer else None
 
+    game_profiles = [
+        GameProfileSummary(
+            game_id=gp.game_id,
+            game_name=gp.game.name,
+            game_slug=gp.game.slug,
+            data=gp.data,
+        )
+        for gp in target_user.game_profiles
+    ]
+
+    user_summary_cls = PrivateUserSummary if reveal_contact else PublicUserSummary
+    user_summary = user_summary_cls.model_validate(target_user).model_copy(
+        update={"game_profiles": game_profiles}
+    )
+
     data = model_cls.model_validate(profile).model_dump()
-    data["user"] = PublicUserSummary.model_validate(target_user)
+    data["user"] = user_summary
     data["stats"] = stats_summary
     data["relationship_status"] = relationship
     data["is_following"] = is_following is not None
@@ -104,7 +128,13 @@ async def get_my_profile(
     service = ProfileService(session)
     profile = await service.get_or_create(current_user)
     return await _build_profile_read(
-        profile, current_user, "self", session, current_user, ProfilePrivateRead
+        profile,
+        current_user,
+        "self",
+        session,
+        current_user,
+        ProfilePrivateRead,
+        reveal_contact=True,
     )
 
 
@@ -117,7 +147,13 @@ async def update_my_profile(
     service = ProfileService(session)
     profile = await service.update_profile(current_user, payload)
     return await _build_profile_read(
-        profile, current_user, "self", session, current_user, ProfilePrivateRead
+        profile,
+        current_user,
+        "self",
+        session,
+        current_user,
+        ProfilePrivateRead,
+        reveal_contact=True,
     )
 
 
@@ -130,7 +166,13 @@ async def update_my_settings(
     service = ProfileService(session)
     profile = await service.update_settings(current_user, payload)
     return await _build_profile_read(
-        profile, current_user, "self", session, current_user, ProfilePrivateRead
+        profile,
+        current_user,
+        "self",
+        session,
+        current_user,
+        ProfilePrivateRead,
+        reveal_contact=True,
     )
 
 
@@ -142,7 +184,13 @@ async def set_online(
     service = ProfileService(session)
     profile = await service.touch_presence(current_user, online=True)
     return await _build_profile_read(
-        profile, current_user, "self", session, current_user, ProfilePrivateRead
+        profile,
+        current_user,
+        "self",
+        session,
+        current_user,
+        ProfilePrivateRead,
+        reveal_contact=True,
     )
 
 
@@ -154,7 +202,13 @@ async def set_offline(
     service = ProfileService(session)
     profile = await service.touch_presence(current_user, online=False)
     return await _build_profile_read(
-        profile, current_user, "self", session, current_user, ProfilePrivateRead
+        profile,
+        current_user,
+        "self",
+        session,
+        current_user,
+        ProfilePrivateRead,
+        reveal_contact=True,
     )
 
 

@@ -5,6 +5,7 @@ from fastapi import APIRouter
 
 from app.api.v1.achievement_routes import router as achievement_router
 from app.api.v1.admin_dashboard_routes import router as admin_dashboard_router
+from app.api.v1.admin_user_routes import router as admin_user_router
 from app.api.v1.anti_cheat_routes import router as anti_cheat_router
 from app.api.v1.security_routes import router as security_router
 from app.api.v1.auth_routes import router as auth_router
@@ -20,6 +21,8 @@ from app.api.v1.moderation_routes import router as moderation_router
 from app.api.v1.notification_routes import router as notification_router
 from app.api.v1.participant_routes import router as participant_router
 from app.api.v1.payment_routes import router as payment_router
+from app.api.v1.payment_method_routes import router as payment_method_router
+from app.api.v1.withdrawal_routes import router as withdrawal_router
 from app.api.v1.prize_routes import router as prize_router
 from app.api.v1.social_routes import router as social_router
 from app.api.v1.team_community_routes import router as team_community_router
@@ -34,6 +37,8 @@ api_v1_router.include_router(auth_router)
 api_v1_router.include_router(user_router)
 api_v1_router.include_router(wallet_router)
 api_v1_router.include_router(payment_router)
+api_v1_router.include_router(payment_method_router)
+api_v1_router.include_router(withdrawal_router)
 api_v1_router.include_router(game_router)
 api_v1_router.include_router(game_mode_router)
 api_v1_router.include_router(map_router)
@@ -51,5 +56,6 @@ api_v1_router.include_router(social_router)
 api_v1_router.include_router(achievement_router)
 api_v1_router.include_router(moderation_router)
 api_v1_router.include_router(admin_dashboard_router)
+api_v1_router.include_router(admin_user_router)
 api_v1_router.include_router(security_router)
 api_v1_router.include_router(anti_cheat_router)
