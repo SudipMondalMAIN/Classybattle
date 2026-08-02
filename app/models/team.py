@@ -19,7 +19,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.database.base import BaseModel
+from app.database.base import BaseModel, ShortIdMixin
 from app.database.types import str_enum
 
 
@@ -45,7 +45,7 @@ def generate_invite_code() -> str:
     return "".join(secrets.choice(alphabet) for _ in range(8))
 
 
-class Team(BaseModel):
+class Team(ShortIdMixin, BaseModel):
     __tablename__ = "teams"
     __table_args__ = (
         UniqueConstraint("invite_code", name="uq_teams_invite_code"),

@@ -57,6 +57,7 @@ class TeamRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
+    short_id: int
     team_uid: str
     tournament_id: UUID
     team_name: str

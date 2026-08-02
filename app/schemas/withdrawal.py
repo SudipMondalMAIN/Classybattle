@@ -22,6 +22,7 @@ class WithdrawalRequestRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
+    short_id: int
     user_id: UUID
     amount: Decimal
     currency: str

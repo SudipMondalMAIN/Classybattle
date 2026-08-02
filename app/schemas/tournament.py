@@ -80,6 +80,7 @@ class TournamentRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
+    short_id: int
     tournament_uid: str
     title: str
     slug: str

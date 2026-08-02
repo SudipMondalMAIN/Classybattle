@@ -38,7 +38,7 @@ from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
-from app.database.base import Base, BaseModel
+from app.database.base import Base, BaseModel, ShortIdMixin
 from app.database.types import PortableJSONB, str_enum
 
 
@@ -109,7 +109,7 @@ class PaymentSettings(Base):
         return f"<PaymentSettings id={self.id} upi_enabled={self.is_upi_enabled}>"
 
 
-class PaymentRequest(BaseModel):
+class PaymentRequest(ShortIdMixin, BaseModel):
     """One user deposit attempt, manually verified by an admin against a
     UPI screenshot + UTR number. Approval credits the wallet exactly once
     (enforced by the unique WalletTransaction reference on

@@ -18,7 +18,7 @@ from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, Numeric, St
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.database.base import BaseModel
+from app.database.base import BaseModel, ShortIdMixin
 from app.database.types import PortableJSONB, str_enum
 from app.models.payment_method import PaymentMethodType
 
@@ -30,7 +30,7 @@ class WithdrawalStatus(str, enum.Enum):
     REJECTED = "rejected"
 
 
-class WithdrawalRequest(BaseModel):
+class WithdrawalRequest(ShortIdMixin, BaseModel):
     __tablename__ = "withdrawal_requests"
     __table_args__ = (
         CheckConstraint("amount > 0", name="ck_withdrawal_requests_amount_positive"),

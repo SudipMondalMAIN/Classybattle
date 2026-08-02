@@ -21,7 +21,7 @@ from sqlalchemy import DateTime, Enum, ForeignKey, Index, String
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.database.base import BaseModel
+from app.database.base import BaseModel, ShortIdMixin
 from app.database.types import PortableJSONB, str_enum
 
 
@@ -67,7 +67,7 @@ class AppealStatus(str, enum.Enum):
     REJECTED = "rejected"
 
 
-class Report(BaseModel):
+class Report(ShortIdMixin, BaseModel):
     __tablename__ = "reports"
     __table_args__ = (
         Index("ix_reports_target", "target_type", "target_id"),
@@ -104,7 +104,7 @@ class Report(BaseModel):
         return f"<Report id={self.id} target_type={self.target_type} target_id={self.target_id}>"
 
 
-class ModerationAction(BaseModel):
+class ModerationAction(ShortIdMixin, BaseModel):
     __tablename__ = "moderation_actions"
 
     user_id: Mapped[uuid.UUID] = mapped_column(

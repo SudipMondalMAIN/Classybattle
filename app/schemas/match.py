@@ -171,6 +171,7 @@ class MatchRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
+    short_id: int
     match_uid: str
     tournament_id: UUID
     round_number: int

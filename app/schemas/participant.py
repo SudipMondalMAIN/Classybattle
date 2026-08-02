@@ -29,6 +29,7 @@ class ParticipantRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
+    short_id: int
     participant_uid: str
     tournament_id: UUID
     user_id: UUID
@@ -50,6 +51,7 @@ class ParticipantListItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
+    short_id: int
     participant_uid: str
     tournament_id: UUID
     user_id: UUID

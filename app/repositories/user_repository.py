@@ -48,9 +48,10 @@ class UserRepository(BaseRepository[User]):
         self, *, query: Optional[str], page: int, page_size: int
     ) -> tuple[list[User], int]:
         """
-        Admin-only search across email, phone number, player_uid, and id (UUID).
-        Matches are partial/case-insensitive for text fields; the id filter
-        only applies when `query` parses as a valid UUID.
+        Admin-only search across email, phone number, player_uid, short_id,
+        and id (UUID). Matches are partial/case-insensitive for text
+        fields; the id filter only applies when `query` parses as a valid
+        UUID, and the short_id filter only when `query` is all digits.
         """
         stmt = select(User).where(User.deleted_at.is_(None))
         count_stmt = select(func.count(User.id)).where(User.deleted_at.is_(None))
@@ -69,6 +70,9 @@ class UserRepository(BaseRepository[User]):
                 conditions.append(User.id == as_uuid)
             except ValueError:
                 pass
+
+            if q.isdigit():
+                conditions.append(User.short_id == int(q))
 
             search_filter = or_(*conditions)
             stmt = stmt.where(search_filter)

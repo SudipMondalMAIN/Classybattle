@@ -21,7 +21,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.database.base import BaseModel
+from app.database.base import BaseModel, ShortIdMixin
 from app.database.types import str_enum
 
 
@@ -68,7 +68,7 @@ PARTICIPANT_STATUS_TRANSITIONS: dict[ParticipantStatus, set[ParticipantStatus]] 
 }
 
 
-class Participant(BaseModel):
+class Participant(ShortIdMixin, BaseModel):
     __tablename__ = "participants"
     __table_args__ = (
         UniqueConstraint(

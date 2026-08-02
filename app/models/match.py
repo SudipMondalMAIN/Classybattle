@@ -21,7 +21,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.database.base import BaseModel
+from app.database.base import BaseModel, ShortIdMixin
 from app.database.types import str_enum
 
 
@@ -73,7 +73,7 @@ MATCH_STATUS_TRANSITIONS: dict[MatchStatus, set[MatchStatus]] = {
 }
 
 
-class Match(BaseModel):
+class Match(ShortIdMixin, BaseModel):
     __tablename__ = "matches"
     __table_args__ = (
         UniqueConstraint(

@@ -22,7 +22,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.database.base import BaseModel
+from app.database.base import BaseModel, ShortIdMixin
 from app.database.types import str_enum
 
 
@@ -75,7 +75,7 @@ TOURNAMENT_STATUS_TRANSITIONS: dict[TournamentStatus, set[TournamentStatus]] = {
 }
 
 
-class Tournament(BaseModel):
+class Tournament(ShortIdMixin, BaseModel):
     __tablename__ = "tournaments"
     __table_args__ = (
         CheckConstraint("entry_fee >= 0", name="ck_tournaments_entry_fee_non_negative"),

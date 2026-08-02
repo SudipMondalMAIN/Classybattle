@@ -7,7 +7,7 @@ from typing import Optional
 from sqlalchemy import Boolean, Enum, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.database.base import BaseModel
+from app.database.base import BaseModel, ShortIdMixin
 from app.database.types import str_enum
 
 
@@ -23,7 +23,7 @@ class UserStatus(str, enum.Enum):
     BANNED = "banned"
 
 
-class User(BaseModel):
+class User(ShortIdMixin, BaseModel):
     __tablename__ = "users"
 
     full_name: Mapped[str] = mapped_column(String(150), nullable=False)

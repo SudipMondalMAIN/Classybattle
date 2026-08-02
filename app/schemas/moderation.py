@@ -29,6 +29,7 @@ class ReportRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
+    short_id: int
     reporter_id: UUID
     target_type: ReportTargetType
     target_id: UUID
@@ -65,6 +66,7 @@ class ModerationActionRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
+    short_id: int
     user_id: UUID
     action_type: ModerationActionType
     status: ModerationActionStatus
