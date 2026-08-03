@@ -10,6 +10,7 @@ lifecycle instead of duplicating state across tables.
 import enum
 import uuid
 from datetime import datetime
+from decimal import Decimal
 from typing import Optional
 
 from sqlalchemy import (
@@ -20,6 +21,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    Numeric,
     String,
     UniqueConstraint,
 )
@@ -148,6 +150,20 @@ class MatchParticipant(BaseModel):
     is_disqualified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     disqualified_reason: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     replaced_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    # ------------------------------------------------------------------
+    # Admin match-details page: result entry (Raj's flow) — how many
+    # kills this player got, whether Admin declared them a winner, and
+    # the winning amount Admin has paid out (credited to wallet).
+    # ------------------------------------------------------------------
+    kills: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    is_winner: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
+    winning_amount: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(12, 2), nullable=True
+    )
+    winning_paid_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
 

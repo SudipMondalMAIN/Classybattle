@@ -11,14 +11,18 @@ Clash Squad join-with-friends-or-random is meant to work.
 """
 import enum
 import uuid
+from datetime import datetime
+from decimal import Decimal
 from typing import Optional
 
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
+    DateTime,
     ForeignKey,
     Index,
     Integer,
+    Numeric,
     String,
     UniqueConstraint,
 )
@@ -119,6 +123,18 @@ class MatchTeamMember(BaseModel):
 
     match_team: Mapped["MatchTeam"] = relationship(back_populates="members", lazy="selectin")
     user: Mapped["User"] = relationship(lazy="selectin")  # noqa: F821
+
+    # ------------------------------------------------------------------
+    # Admin match-details page: same per-player result fields as
+    # MatchParticipant, but scoped to one squad member (a squad match's
+    # MatchParticipant row represents the whole team, not one user).
+    # ------------------------------------------------------------------
+    kills: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    is_winner: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
+    winning_amount: Mapped[Optional[Decimal]] = mapped_column(Numeric(12, 2), nullable=True)
+    winning_paid_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     def __repr__(self) -> str:
         return f"<MatchTeamMember match_team_id={self.match_team_id} user_id={self.user_id}>"
