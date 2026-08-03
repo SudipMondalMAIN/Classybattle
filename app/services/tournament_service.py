@@ -229,6 +229,12 @@ class TournamentService:
             raise NotFoundException("Tournament not found")
         return tournament
 
+    async def get_by_short_id(self, short_id: int) -> Tournament:
+        tournament = await self.repo.get_by_short_id(short_id)
+        if tournament is None:
+            raise NotFoundException("Tournament not found")
+        return tournament
+
     async def list_tournaments(
         self,
         *,

@@ -200,6 +200,18 @@ async def admin_list_deposits(
     return _paginate(items, total, page, page_size, PaymentRequestRead)
 
 
+@router.get("/admin/payments/deposits/short/{short_id}", response_model=PaymentRequestRead)
+async def admin_get_deposit_by_short_id(
+    short_id: int,
+    _admin: User = Depends(require_admin),
+    session: AsyncSession = Depends(get_db_session),
+):
+    """Admin lookup by the human-friendly 8-digit short_id."""
+    service = PaymentService(session)
+    payment_request = await service.get_request_for_admin_by_short_id(short_id)
+    return PaymentRequestRead.model_validate(payment_request)
+
+
 @router.get("/admin/payments/deposits/{payment_request_id}", response_model=PaymentRequestRead)
 async def admin_get_deposit(
     payment_request_id: UUID,

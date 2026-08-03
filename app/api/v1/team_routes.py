@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_db_session
-from app.dependencies.auth import get_current_active_verified_user
+from app.dependencies.auth import get_current_active_verified_user, require_admin
 from app.models.team import TeamStatus
 from app.models.user import User
 from app.schemas.team import (
@@ -140,6 +140,18 @@ async def list_tournament_teams_organizer(
 # ----------------------------------------------------------------------
 # Individual team management
 # ----------------------------------------------------------------------
+@router.get("/teams/short/{short_id}", response_model=TeamReadWithMembers)
+async def get_team_by_short_id(
+    short_id: int,
+    current_user: User = Depends(require_admin),
+    session: AsyncSession = Depends(get_db_session),
+):
+    """Admin lookup by the human-friendly 8-digit short_id."""
+    service = TeamService(session)
+    team = await service.get_team_by_short_id(short_id)
+    return TeamReadWithMembers.model_validate(team)
+
+
 @router.get("/teams/{team_id}", response_model=TeamReadWithMembers)
 async def get_team_details(
     team_id: UUID,

@@ -109,6 +109,12 @@ class MatchService:
             raise NotFoundException("Match not found")
         return match
 
+    async def get_match_by_short_id(self, short_id: int) -> Match:
+        match = await self.repo.get_by_short_id(short_id)
+        if match is None:
+            raise NotFoundException("Match not found")
+        return match
+
     async def _get_match_and_tournament(self, match_id: UUID) -> tuple[Match, Tournament]:
         match = await self.get_match(match_id)
         tournament = await self._get_tournament(match.tournament_id)

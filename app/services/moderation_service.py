@@ -131,6 +131,12 @@ class ModerationService:
             raise NotFoundException("Report not found")
         return report
 
+    async def get_report_by_short_id(self, short_id: int) -> Report:
+        report = await self.report_repo.get_by_short_id(short_id)
+        if report is None:
+            raise NotFoundException("Report not found")
+        return report
+
     async def list_reports(
         self,
         *,
@@ -240,6 +246,12 @@ class ModerationService:
         except Exception:  # noqa: BLE001
             pass
 
+        return action
+
+    async def get_action_by_short_id(self, short_id: int) -> ModerationAction:
+        action = await self.action_repo.get_by_short_id(short_id)
+        if action is None:
+            raise NotFoundException("Moderation action not found")
         return action
 
     async def revoke_action(self, *, admin: User, action_id: UUID, reason: Optional[str]) -> ModerationAction:

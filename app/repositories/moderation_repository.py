@@ -56,6 +56,11 @@ class ReportRepository(BaseRepository[Report]):
         result = await self.session.execute(stmt)
         return result.scalars().all(), total
 
+    async def get_by_short_id(self, short_id: int) -> Optional[Report]:
+        stmt = select(Report).where(Report.short_id == short_id, Report.deleted_at.is_(None))
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
     async def count_recent_for_target(
         self, target_type: ReportTargetType, target_id: UUID, since: datetime
     ) -> int:
@@ -80,6 +85,13 @@ class ModerationActionRepository(BaseRepository[ModerationAction]):
         )
         result = await self.session.execute(stmt)
         return result.scalars().all()
+
+    async def get_by_short_id(self, short_id: int) -> Optional[ModerationAction]:
+        stmt = select(ModerationAction).where(
+            ModerationAction.short_id == short_id, ModerationAction.deleted_at.is_(None)
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
 
     async def list_active_for_user(self, user_id: UUID) -> Sequence[ModerationAction]:
         stmt = select(ModerationAction).where(

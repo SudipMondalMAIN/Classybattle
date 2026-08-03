@@ -113,6 +113,18 @@ async def get_tournament_by_slug(
     return TournamentRead.model_validate(tournament)
 
 
+@router.get("/short/{short_id}", response_model=TournamentRead)
+async def get_tournament_by_short_id(
+    short_id: int,
+    current_user: User = Depends(require_admin),
+    session: AsyncSession = Depends(get_db_session),
+):
+    """Admin lookup by the human-friendly 8-digit short_id."""
+    service = TournamentService(session)
+    tournament = await service.get_by_short_id(short_id)
+    return TournamentRead.model_validate(tournament)
+
+
 @router.get("/{tournament_id}", response_model=TournamentRead)
 async def get_tournament(
     tournament_id: UUID,

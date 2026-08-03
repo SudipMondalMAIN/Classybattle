@@ -98,6 +98,12 @@ class TeamService:
     async def get_team_details(self, team_id: UUID) -> Team:
         return await self.get_team(team_id)
 
+    async def get_team_by_short_id(self, short_id: int) -> Team:
+        team = await self.repo.get_by_short_id(short_id)
+        if team is None:
+            raise NotFoundException("Team not found")
+        return team
+
     # ------------------------------------------------------------------
     # Validation helpers
     # ------------------------------------------------------------------

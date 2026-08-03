@@ -84,6 +84,18 @@ async def admin_list_reports(
     )
 
 
+@router.get("/admin/reports/short/{short_id}", response_model=ReportRead)
+async def admin_get_report_by_short_id(
+    short_id: int,
+    _admin: User = Depends(require_admin),
+    session: AsyncSession = Depends(get_db_session),
+):
+    """Admin lookup by the human-friendly 8-digit short_id."""
+    service = ModerationService(session)
+    report = await service.get_report_by_short_id(short_id)
+    return ReportRead.model_validate(report)
+
+
 @router.get("/admin/reports/{report_id}", response_model=ReportRead)
 async def admin_get_report(
     report_id: UUID,
@@ -140,6 +152,18 @@ async def admin_issue_action(
         report_id=payload.report_id,
         duration_hours=payload.duration_hours,
     )
+    return ModerationActionRead.model_validate(action)
+
+
+@router.get("/admin/moderation-actions/short/{short_id}", response_model=ModerationActionRead)
+async def admin_get_action_by_short_id(
+    short_id: int,
+    _admin: User = Depends(require_admin),
+    session: AsyncSession = Depends(get_db_session),
+):
+    """Admin lookup by the human-friendly 8-digit short_id."""
+    service = ModerationService(session)
+    action = await service.get_action_by_short_id(short_id)
     return ModerationActionRead.model_validate(action)
 
 

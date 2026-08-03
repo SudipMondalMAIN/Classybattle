@@ -30,6 +30,15 @@ class MatchRepository(BaseRepository[Match]):
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
+    async def get_by_short_id(
+        self, short_id: int, include_deleted: bool = False
+    ) -> Optional[Match]:
+        stmt = select(Match).where(Match.short_id == short_id)
+        if not include_deleted:
+            stmt = stmt.where(Match.deleted_at.is_(None))
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
     async def exists_round_match_number(
         self,
         tournament_id: UUID,

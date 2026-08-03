@@ -125,6 +125,14 @@ class WithdrawalService:
     async def get_for_admin(self, withdrawal_id: UUID) -> WithdrawalRequest:
         return await self._get(withdrawal_id)
 
+    async def get_for_admin_by_short_id(self, short_id: int) -> WithdrawalRequest:
+        stmt = select(WithdrawalRequest).where(WithdrawalRequest.short_id == short_id)
+        result = await self.session.execute(stmt)
+        withdrawal = result.scalar_one_or_none()
+        if withdrawal is None:
+            raise NotFoundException("Withdrawal request not found")
+        return withdrawal
+
     async def complete(
         self, admin: User, withdrawal_id: UUID, admin_note: Optional[str]
     ) -> WithdrawalRequest:

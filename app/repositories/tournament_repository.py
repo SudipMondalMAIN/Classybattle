@@ -32,6 +32,15 @@ class TournamentRepository(BaseRepository[Tournament]):
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
+    async def get_by_short_id(
+        self, short_id: int, include_deleted: bool = False
+    ) -> Optional[Tournament]:
+        stmt = select(Tournament).where(Tournament.short_id == short_id)
+        if not include_deleted:
+            stmt = stmt.where(Tournament.deleted_at.is_(None))
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
     async def slug_exists(self, slug: str) -> bool:
         stmt = select(Tournament.id).where(Tournament.slug == slug)
         result = await self.session.execute(stmt)
@@ -79,13 +88,15 @@ class TournamentRepository(BaseRepository[Tournament]):
         if is_featured is not None:
             conditions.append(Tournament.is_featured.is_(is_featured))
         if search:
-            like = f"%{search.strip().lower()}%"
-            conditions.append(
-                or_(
-                    func.lower(Tournament.title).like(like),
-                    func.lower(cast(Tournament.organizer, String)).like(like),
-                )
-            )
+            q = search.strip()
+            like = f"%{q.lower()}%"
+            search_conditions = [
+                func.lower(Tournament.title).like(like),
+                func.lower(cast(Tournament.organizer, String)).like(like),
+            ]
+            if q.isdigit():
+                search_conditions.append(Tournament.short_id == int(q))
+            conditions.append(or_(*search_conditions))
 
         count_stmt = select(func.count(Tournament.id)).where(*conditions)
         total = (await self.session.execute(count_stmt)).scalar_one()

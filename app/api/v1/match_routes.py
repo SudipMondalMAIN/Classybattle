@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_db_session
-from app.dependencies.auth import get_current_active_verified_user
+from app.dependencies.auth import get_current_active_verified_user, require_admin
 from app.models.match import MatchStatus
 from app.models.match_participant import MatchAssignmentType
 from app.models.user import User
@@ -117,6 +117,18 @@ async def list_tournament_matches_organizer(
         sort_order=sort_order,
     )
     return _paginate(items, total, page, page_size)
+
+
+@router.get("/matches/short/{short_id}", response_model=MatchRead)
+async def get_match_by_short_id(
+    short_id: int,
+    current_user: User = Depends(require_admin),
+    session: AsyncSession = Depends(get_db_session),
+):
+    """Admin lookup by the human-friendly 8-digit short_id."""
+    service = MatchService(session)
+    match = await service.get_match_by_short_id(short_id)
+    return MatchRead.model_validate(match)
 
 
 @router.get("/matches/{match_id}", response_model=MatchReadWithSlots)

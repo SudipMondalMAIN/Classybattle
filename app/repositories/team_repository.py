@@ -31,6 +31,15 @@ class TeamRepository(BaseRepository[Team]):
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
+    async def get_by_short_id(
+        self, short_id: int, include_deleted: bool = False
+    ) -> Optional[Team]:
+        stmt = select(Team).where(Team.short_id == short_id)
+        if not include_deleted:
+            stmt = stmt.where(Team.deleted_at.is_(None))
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
     async def invite_code_exists(self, invite_code: str) -> bool:
         stmt = select(Team.id).where(Team.invite_code == invite_code)
         result = await self.session.execute(stmt)
@@ -76,13 +85,15 @@ class TeamRepository(BaseRepository[Team]):
         if status is not None:
             conditions.append(Team.status == status)
         if search:
-            like = f"%{search.strip().lower()}%"
-            conditions.append(
-                or_(
-                    func.lower(cast(Team.team_name, String)).like(like),
-                    func.lower(cast(Team.team_uid, String)).like(like),
-                )
-            )
+            q = search.strip()
+            like = f"%{q.lower()}%"
+            search_conditions = [
+                func.lower(cast(Team.team_name, String)).like(like),
+                func.lower(cast(Team.team_uid, String)).like(like),
+            ]
+            if q.isdigit():
+                search_conditions.append(Team.short_id == int(q))
+            conditions.append(or_(*search_conditions))
 
         count_stmt = select(func.count(Team.id)).where(*conditions)
         total = (await self.session.execute(count_stmt)).scalar_one()

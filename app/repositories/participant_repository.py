@@ -36,6 +36,15 @@ class ParticipantRepository(BaseRepository[Participant]):
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
+    async def get_by_short_id(
+        self, short_id: int, include_deleted: bool = False
+    ) -> Optional[Participant]:
+        stmt = select(Participant).where(Participant.short_id == short_id)
+        if not include_deleted:
+            stmt = stmt.where(Participant.deleted_at.is_(None))
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
     async def count_active_for_tournament(self, tournament_id: UUID) -> int:
         """Counts participants that occupy a capacity slot (pending/confirmed/checked_in)."""
         stmt = select(func.count(Participant.id)).where(
@@ -70,13 +79,15 @@ class ParticipantRepository(BaseRepository[Participant]):
         if status is not None:
             conditions.append(Participant.status == status)
         if search:
-            like = f"%{search.strip().lower()}%"
-            conditions.append(
-                or_(
-                    func.lower(cast(Participant.team_name, String)).like(like),
-                    func.lower(cast(Participant.participant_uid, String)).like(like),
-                )
-            )
+            q = search.strip()
+            like = f"%{q.lower()}%"
+            search_conditions = [
+                func.lower(cast(Participant.team_name, String)).like(like),
+                func.lower(cast(Participant.participant_uid, String)).like(like),
+            ]
+            if q.isdigit():
+                search_conditions.append(Participant.short_id == int(q))
+            conditions.append(or_(*search_conditions))
 
         count_stmt = select(func.count(Participant.id)).where(*conditions)
         total = (await self.session.execute(count_stmt)).scalar_one()

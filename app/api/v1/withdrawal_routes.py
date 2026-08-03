@@ -111,6 +111,18 @@ async def admin_list_withdrawals(
     )
 
 
+@router.get("/admin/withdrawals/short/{short_id}", response_model=WithdrawalRequestRead)
+async def admin_get_withdrawal_by_short_id(
+    short_id: int,
+    session: AsyncSession = Depends(get_db_session),
+    _admin=Depends(require_admin),
+):
+    """Admin lookup by the human-friendly 8-digit short_id."""
+    service = WithdrawalService(session)
+    withdrawal = await service.get_for_admin_by_short_id(short_id)
+    return WithdrawalRequestRead.model_validate(withdrawal)
+
+
 @router.get("/admin/withdrawals/{withdrawal_id}", response_model=WithdrawalRequestRead)
 async def admin_get_withdrawal(
     withdrawal_id: UUID,

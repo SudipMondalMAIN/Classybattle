@@ -292,6 +292,12 @@ class PaymentService:
             raise NotFoundException("Payment request not found")
         return payment_request
 
+    async def get_request_for_admin_by_short_id(self, short_id: int) -> PaymentRequest:
+        payment_request = await self.request_repo.get_by_short_id(short_id)
+        if payment_request is None:
+            raise NotFoundException("Payment request not found")
+        return payment_request
+
     async def list_my_requests(
         self,
         *,

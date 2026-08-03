@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_db_session
-from app.dependencies.auth import get_current_active_verified_user
+from app.dependencies.auth import get_current_active_verified_user, require_admin
 from app.models.participant import ParticipantStatus
 from app.models.user import User
 from app.schemas.participant import (
@@ -183,6 +183,21 @@ async def list_tournament_participants_organizer(
 # ----------------------------------------------------------------------
 # Individual participant records
 # ----------------------------------------------------------------------
+@router.get(
+    "/participants/short/{short_id}",
+    response_model=ParticipantRead,
+)
+async def get_participant_by_short_id(
+    short_id: int,
+    current_user: User = Depends(require_admin),
+    session: AsyncSession = Depends(get_db_session),
+):
+    """Admin lookup by the human-friendly 8-digit short_id."""
+    service = ParticipantService(session)
+    participant = await service.get_participant_by_short_id(short_id)
+    return ParticipantRead.model_validate(participant)
+
+
 @router.get(
     "/participants/{participant_id}",
     response_model=ParticipantRead,

@@ -114,6 +114,12 @@ class ParticipantService:
             raise NotFoundException("Participant not found")
         return participant
 
+    async def get_participant_by_short_id(self, short_id: int) -> Participant:
+        participant = await self.repo.get_by_short_id(short_id)
+        if participant is None:
+            raise NotFoundException("Participant not found")
+        return participant
+
     async def get_participant_authorized(
         self, participant_id: UUID, current_user: User
     ) -> Participant:
