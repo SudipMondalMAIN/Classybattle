@@ -21,6 +21,13 @@ that's already been generated is a no-op, tracked via
 """
 from datetime import date, datetime, timedelta, timezone
 from typing import Optional
+
+# Admin-entered daily_slot_times / daily_start_time / daily_end_time are
+# IST wall-clock times (e.g. "18:00" means 6:00 PM in India), NOT UTC.
+# All Match.scheduled_start/end columns are stored in UTC, so every
+# admin-entered time must be interpreted as IST first, then converted
+# to UTC before it touches the database.
+IST = timezone(timedelta(hours=5, minutes=30))
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -79,9 +86,12 @@ class SlotGeneratorService:
             )
             for time_str in tournament.daily_slot_times:
                 hour, minute = (int(p) for p in time_str.split(":")[:2])
-                start = datetime.combine(
-                    target_date, datetime.min.time(), tzinfo=timezone.utc
+                # Interpret the admin-entered HH:MM as IST wall-clock time,
+                # then convert to UTC for storage.
+                start_ist = datetime.combine(
+                    target_date, datetime.min.time(), tzinfo=IST
                 ).replace(hour=hour, minute=minute)
+                start = start_ist.astimezone(timezone.utc)
                 match = await self.match_repo.create(
                     tournament_id=tournament.id,
                     round_number=1,
@@ -102,8 +112,13 @@ class SlotGeneratorService:
             # Legacy interval-based generation, kept for backward compatibility.
             formats = tournament.allowed_team_formats or ["solo"]
             interval = timedelta(minutes=tournament.slot_interval_minutes)
-            start_dt = datetime.combine(target_date, tournament.daily_start_time, tzinfo=timezone.utc)
-            end_dt = datetime.combine(target_date, tournament.daily_end_time, tzinfo=timezone.utc)
+            # Same IST -> UTC fix as above for the legacy fields.
+            start_dt = datetime.combine(
+                target_date, tournament.daily_start_time, tzinfo=IST
+            ).astimezone(timezone.utc)
+            end_dt = datetime.combine(
+                target_date, tournament.daily_end_time, tzinfo=IST
+            ).astimezone(timezone.utc)
             cursor = start_dt
             while cursor < end_dt:
                 slot_end = min(cursor + interval, end_dt)
@@ -143,7 +158,11 @@ class SlotGeneratorService:
         """Run generation for every active recurring schedule. Intended to
         be called once a day by a cron job / scheduled task (e.g. just
         after midnight, to generate today's Free Fire and BGMI slots)."""
-        target_date = target_date or datetime.now(timezone.utc).date()
+        # "Today" for this cron is the IST calendar date, not UTC — the
+        # job is meant to run just after midnight IST, and using UTC's
+        # date here would keep generating "yesterday's" slots until
+        # 5:30 AM UTC.
+        target_date = target_date or datetime.now(IST).date()
         schedules = await self.tournament_repo.list_active_recurring_schedules()
 
         results: dict[UUID, list[Match]] = {}
