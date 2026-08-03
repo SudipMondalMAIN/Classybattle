@@ -136,17 +136,12 @@ async def _resolve_target_user(user_id: UUID, session: AsyncSession) -> User:
     return user
 
 
-@router.get("/admin/wallets/{user_id}", response_model=WalletReadWithTotal)
-async def admin_get_wallet(
-    user_id: UUID,
-    _admin: User = Depends(require_admin),
-    session: AsyncSession = Depends(get_db_session),
-):
-    service = WalletService(session)
-    wallet = await service.get_wallet_for_admin(user_id)
-    return _to_wallet_with_total(wallet)
-
-
+# NOTE: static-path routes (e.g. "/admin/wallets/transactions") MUST be
+# registered before the dynamic "/admin/wallets/{user_id}" route below.
+# FastAPI/Starlette matches routes in registration order, so if the
+# {user_id} route comes first, a request to .../transactions gets
+# captured by it with user_id="transactions", which then fails UUID
+# parsing (422 uuid_parsing error). Keep this route above admin_get_wallet.
 @router.get("/admin/wallets/transactions", response_model=PaginatedWalletTransactions)
 async def admin_list_transactions(
     page: int = Query(1, ge=1),
@@ -177,6 +172,17 @@ async def admin_list_transactions(
         page_size=page_size,
         total_pages=total_pages,
     )
+
+
+@router.get("/admin/wallets/{user_id}", response_model=WalletReadWithTotal)
+async def admin_get_wallet(
+    user_id: UUID,
+    _admin: User = Depends(require_admin),
+    session: AsyncSession = Depends(get_db_session),
+):
+    service = WalletService(session)
+    wallet = await service.get_wallet_for_admin(user_id)
+    return _to_wallet_with_total(wallet)
 
 
 @router.post("/admin/wallets/{user_id}/adjust", response_model=WalletTransactionRead)

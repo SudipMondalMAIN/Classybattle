@@ -97,6 +97,37 @@ async def mark_notification_read(
     return NotificationRead.model_validate(notification)
 
 
+# ----------------------------------------------------------------------
+# Device tokens (push)
+#
+# NOTE: registered here, ABOVE the dynamic delete("/notifications/{id}")
+# route below. FastAPI/Starlette matches routes in registration order,
+# so DELETE /notifications/device-tokens would otherwise be captured by
+# delete("/notifications/{notification_id}") with
+# notification_id="device-tokens", failing UUID parsing (422).
+# ----------------------------------------------------------------------
+@router.post("/notifications/device-tokens", status_code=201)
+async def register_device_token(
+    payload: DeviceTokenRegisterRequest,
+    current_user: User = Depends(get_current_active_verified_user),
+    session: AsyncSession = Depends(get_db_session),
+):
+    service = NotificationService(session)
+    await service.register_device_token(current_user, payload.fcm_token, payload.platform)
+    return {"success": True}
+
+
+@router.delete("/notifications/device-tokens")
+async def deregister_device_token(
+    payload: DeviceTokenDeregisterRequest,
+    current_user: User = Depends(get_current_active_verified_user),
+    session: AsyncSession = Depends(get_db_session),
+):
+    service = NotificationService(session)
+    removed = await service.deregister_device_token(current_user, payload.fcm_token)
+    return {"success": removed}
+
+
 @router.delete("/notifications/{notification_id}", response_model=MarkReadResponse)
 async def delete_notification(
     notification_id: UUID,
@@ -141,31 +172,6 @@ async def update_my_preferences(
     service = NotificationService(session)
     pref = await service.update_preferences(current_user, payload)
     return NotificationPreferenceRead.model_validate(pref)
-
-
-# ----------------------------------------------------------------------
-# Device tokens (push)
-# ----------------------------------------------------------------------
-@router.post("/notifications/device-tokens", status_code=201)
-async def register_device_token(
-    payload: DeviceTokenRegisterRequest,
-    current_user: User = Depends(get_current_active_verified_user),
-    session: AsyncSession = Depends(get_db_session),
-):
-    service = NotificationService(session)
-    await service.register_device_token(current_user, payload.fcm_token, payload.platform)
-    return {"success": True}
-
-
-@router.delete("/notifications/device-tokens")
-async def deregister_device_token(
-    payload: DeviceTokenDeregisterRequest,
-    current_user: User = Depends(get_current_active_verified_user),
-    session: AsyncSession = Depends(get_db_session),
-):
-    service = NotificationService(session)
-    removed = await service.deregister_device_token(current_user, payload.fcm_token)
-    return {"success": removed}
 
 
 # ----------------------------------------------------------------------
