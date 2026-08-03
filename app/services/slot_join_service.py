@@ -135,6 +135,10 @@ class SlotJoinService:
         if already is not None:
             raise ConflictException("You have already joined this slot")
 
+        current_count = await self.slot_repo.count_for_match(match.id)
+        if current_count >= tournament.max_players:
+            raise ConflictException("This slot is full")
+
         fee = self._entry_fee(match, tournament)
         await self._charge_slot_entry_fee(match, current_user, fee)
 
@@ -150,6 +154,19 @@ class SlotJoinService:
         await self.session.commit()
         await self.session.refresh(slot)
         return slot
+
+    async def _assert_team_slot_has_room(
+        self, match: Match, tournament: Tournament, team_size: int
+    ) -> None:
+        """A slot's total capacity (tournament.max_players, e.g. 8 for
+        Clash Squad) divided by the team_format's team_size gives the max
+        number of teams allowed in this slot (e.g. 8 // 4 = 2 teams for
+        4v4). Raise if that cap is already reached before a new team is
+        started."""
+        max_teams = max(tournament.max_players // team_size, 1)
+        active_teams = await self.match_team_repo.count_teams_for_match(match.id)
+        if active_teams >= max_teams:
+            raise ConflictException("This slot is full — no more teams can join")
 
     # ==================================================================
     # Team join (Free Fire Clash Squad — 1v1/2v2/3v3/4v4)
@@ -196,6 +213,9 @@ class SlotJoinService:
         elif mode == SlotJoinMode.RANDOM:
             match_team = await self.match_team_repo.find_open_random_team(match.id)
             if match_team is None:
+                # Starting a brand-new team occupies a fresh team-slot in
+                # this match — enforce the per-slot team cap before doing so.
+                await self._assert_team_slot_has_room(match, tournament, team_size)
                 if team_size == 1:
                     # 1v1 random has no "waiting group" — just start a team
                     # of size 1, immediately locked, and let the match get
@@ -215,6 +235,7 @@ class SlotJoinService:
                 )
 
         else:  # CREATE
+            await self._assert_team_slot_has_room(match, tournament, team_size)
             match_team = await self.match_team_repo.create(
                 match_id=match.id,
                 team_name=team_name,

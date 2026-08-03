@@ -11,6 +11,7 @@ from slowapi.middleware import SlowAPIMiddleware
 from app.api.v1.router import api_v1_router
 from app.config.settings import settings
 from app.core.logging import configure_logging, get_logger
+from app.core.scheduler import start_slot_scheduler, stop_slot_scheduler
 from app.core.sentry import init_sentry
 from app.middleware.exception_handlers import register_exception_handlers
 from app.middleware.logging_middleware import RequestLoggingMiddleware
@@ -26,7 +27,9 @@ logger = get_logger("main")
 async def lifespan(app: FastAPI):
     logger.info("app_starting", env=settings.APP_ENV)
     init_firebase()
+    start_slot_scheduler()
     yield
+    stop_slot_scheduler()
     logger.info("app_shutting_down")
 
 
