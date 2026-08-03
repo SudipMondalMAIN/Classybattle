@@ -48,6 +48,8 @@ class MatchCreate(BaseModel):
 class MatchUpdate(BaseModel):
     notes: Optional[str] = Field(None, max_length=2000)
     auto_disqualify_on_no_show: Optional[bool] = None
+    entry_fee: Optional[Decimal] = Field(None, ge=0, description="Admin override for this specific match")
+    prize_pool: Optional[Decimal] = Field(None, ge=0, description="Admin override for this specific match")
 
 
 class MatchSchedule(BaseModel):
@@ -179,6 +181,7 @@ class MatchRead(BaseModel):
     match_number: int
     team_format: Optional[str] = None
     entry_fee: Optional[Decimal] = None
+    prize_pool: Optional[Decimal] = None
     room_name: Optional[str] = None
     room_status: RoomStatus
     match_status: MatchStatus

@@ -13,11 +13,15 @@ from app.services.slot_join_service import SlotJoinMode
 
 
 class SlotJoinSoloRequest(BaseModel):
-    game_profile_id: UUID
+    game_profile_id: Optional[UUID] = Field(
+        None, description="Omit if the user already saved a profile for this game — it will be reused automatically."
+    )
 
 
 class SlotJoinTeamRequest(BaseModel):
-    game_profile_id: UUID
+    game_profile_id: Optional[UUID] = Field(
+        None, description="Omit if the user already saved a profile for this game — it will be reused automatically."
+    )
     mode: SlotJoinMode
     team_name: Optional[str] = Field(None, min_length=2, max_length=150)
     invite_code: Optional[str] = Field(None, min_length=4, max_length=16)

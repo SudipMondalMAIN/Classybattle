@@ -52,14 +52,28 @@ async def update_schedule(
 
 @router.get("/schedules", response_model=list[ScheduleRead])
 async def list_schedules(
+    game_id: Optional[UUID] = Query(None, description="Filter to one game's SOLO/SQUAD schedules"),
     active_only: bool = Query(True),
     session: AsyncSession = Depends(get_db_session),
 ):
-    """Public: browse available game/mode schedules (e.g. to build the
-    'Free Fire' / 'BGMI' tabs on the home screen)."""
+    """Public: browse available game schedules (e.g. to build the
+    'Free Fire' / 'BGMI' tabs, each showing a Solo card + a Squad card)."""
     service = ScheduleService(session)
-    schedules = await service.list_schedules(active_only=active_only)
+    schedules = await service.list_schedules(game_id=game_id, active_only=active_only)
     return [ScheduleRead.model_validate(s) for s in schedules]
+
+
+@router.post("/schedules/generate-today", status_code=200)
+async def generate_all_today(
+    current_user: User = Depends(require_admin),
+    session: AsyncSession = Depends(get_db_session),
+):
+    """Admin/cron: generate today's matches for every active game schedule
+    in one call. Wire this to a daily cron shortly after midnight so
+    Admin never has to click 'generate' per game manually."""
+    service = ScheduleService(session)
+    results = await service.generate_all_today()
+    return {"generated_for_schedules": len(results), "total_matches": sum(len(v) for v in results.values())}
 
 
 @router.get("/schedules/{schedule_id}", response_model=ScheduleRead)

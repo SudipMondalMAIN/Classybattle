@@ -127,6 +127,10 @@ class Match(ShortIdMixin, BaseModel):
         Numeric(10, 2), nullable=True,
         comment="Entry fee charged at join for this slot; falls back to the parent schedule's entry_fee if null.",
     )
+    prize_pool: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(12, 2), nullable=True,
+        comment="Prize pool for this specific match; falls back to the parent schedule's prize_pool if null. Admin-editable per match.",
+    )
 
     # ------------------------------------------------------------------
     # Room details. Password is stored so it can be re-published/edited by

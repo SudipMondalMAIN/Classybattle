@@ -50,14 +50,6 @@ class SlotGeneratorService:
             raise ValidationException(
                 "This tournament is not a recurring schedule — cannot generate slots"
             )
-        if not (
-            tournament.daily_start_time
-            and tournament.daily_end_time
-            and tournament.slot_interval_minutes
-        ):
-            raise ValidationException(
-                "Schedule is missing daily_start_time/daily_end_time/slot_interval_minutes"
-            )
 
         if (
             tournament.last_generated_on is not None
@@ -68,27 +60,37 @@ class SlotGeneratorService:
                 tournament.id, target_date
             )
 
-        formats = tournament.allowed_team_formats or ["solo"]
-        interval = timedelta(minutes=tournament.slot_interval_minutes)
-
-        start_dt = datetime.combine(target_date, tournament.daily_start_time, tzinfo=timezone.utc)
-        end_dt = datetime.combine(target_date, tournament.daily_end_time, tzinfo=timezone.utc)
-
         created: list[Match] = []
         slot_number = await self.match_repo.next_match_number(tournament.id, round_number=1)
 
-        cursor = start_dt
-        while cursor < end_dt:
-            slot_end = min(cursor + interval, end_dt)
-            for team_format in formats:
+        if tournament.daily_slot_times:
+            # ------------------------------------------------------------
+            # Simplified flow: one Match per admin-configured "HH:MM"
+            # entry in daily_slot_times. Number of matches/day = however
+            # many entries Admin has configured (not locked to any fixed
+            # number — 27, 28, 29, whatever). team_format is derived from
+            # the schedule's category (solo -> "solo", squad -> "NvN"
+            # from squad_size).
+            # ------------------------------------------------------------
+            team_format = (
+                "solo"
+                if tournament.category is None or tournament.category.value == "solo"
+                else f"{tournament.squad_size}v{tournament.squad_size}"
+            )
+            for time_str in tournament.daily_slot_times:
+                hour, minute = (int(p) for p in time_str.split(":")[:2])
+                start = datetime.combine(
+                    target_date, datetime.min.time(), tzinfo=timezone.utc
+                ).replace(hour=hour, minute=minute)
                 match = await self.match_repo.create(
                     tournament_id=tournament.id,
                     round_number=1,
                     match_number=slot_number,
-                    scheduled_start=cursor,
-                    scheduled_end=slot_end,
+                    scheduled_start=start,
+                    scheduled_end=start + timedelta(minutes=30),
                     team_format=team_format,
                     entry_fee=tournament.entry_fee,
+                    prize_pool=tournament.prize_pool,
                     match_status=MatchStatus.SCHEDULED,
                     room_status=RoomStatus.NOT_CREATED,
                     auto_disqualify_on_no_show=True,
@@ -96,7 +98,37 @@ class SlotGeneratorService:
                 )
                 created.append(match)
                 slot_number += 1
-            cursor += interval
+        elif tournament.daily_start_time and tournament.daily_end_time and tournament.slot_interval_minutes:
+            # Legacy interval-based generation, kept for backward compatibility.
+            formats = tournament.allowed_team_formats or ["solo"]
+            interval = timedelta(minutes=tournament.slot_interval_minutes)
+            start_dt = datetime.combine(target_date, tournament.daily_start_time, tzinfo=timezone.utc)
+            end_dt = datetime.combine(target_date, tournament.daily_end_time, tzinfo=timezone.utc)
+            cursor = start_dt
+            while cursor < end_dt:
+                slot_end = min(cursor + interval, end_dt)
+                for team_format in formats:
+                    match = await self.match_repo.create(
+                        tournament_id=tournament.id,
+                        round_number=1,
+                        match_number=slot_number,
+                        scheduled_start=cursor,
+                        scheduled_end=slot_end,
+                        team_format=team_format,
+                        entry_fee=tournament.entry_fee,
+                        prize_pool=tournament.prize_pool,
+                        match_status=MatchStatus.SCHEDULED,
+                        room_status=RoomStatus.NOT_CREATED,
+                        auto_disqualify_on_no_show=True,
+                        created_by=tournament.created_by,
+                    )
+                    created.append(match)
+                    slot_number += 1
+                cursor += interval
+        else:
+            raise ValidationException(
+                "Schedule is missing daily_slot_times (or legacy daily_start_time/daily_end_time/slot_interval_minutes)"
+            )
 
         tournament.last_generated_on = datetime.now(timezone.utc)
         await self.session.commit()

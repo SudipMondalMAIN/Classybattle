@@ -56,6 +56,20 @@ class TournamentRepository(BaseRepository[Tournament]):
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none() is not None
 
+    async def get_active_schedule_for_game_category(
+        self, game_id: UUID, category
+    ) -> Optional[Tournament]:
+        """One SOLO schedule + one SQUAD schedule per game (Raj's simplified
+        flow) — used to block accidental duplicates on create."""
+        stmt = select(Tournament).where(
+            Tournament.game_id == game_id,
+            Tournament.category == category,
+            Tournament.is_recurring_schedule.is_(True),
+            Tournament.deleted_at.is_(None),
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
     async def list_active_recurring_schedules(self) -> Sequence[Tournament]:
         """All recurring schedule templates (e.g. 'Free Fire Classic',
         'BGMI Squad') that are currently published/open and should have

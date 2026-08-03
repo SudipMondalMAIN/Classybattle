@@ -52,6 +52,19 @@ class TeamRegistrationMode(str, enum.Enum):
     AUTO_RANDOM = "auto_random"
 
 
+class ScheduleCategory(str, enum.Enum):
+    """Simplified per-game category for auto-generated daily match
+    schedules (Raj's simplified flow): every Game has at most two
+    schedules — SOLO (classic/battle-royale, join alone) and SQUAD
+    (Clash-Squad style, join as a fixed-size team). No map/mode picking
+    needed; Admin only configures matches-per-day, per-match time,
+    entry fee and prize pool for each.
+    """
+
+    SOLO = "solo"
+    SQUAD = "squad"
+
+
 class TeamFormat(str, enum.Enum):
     """Player-vs-player team size for Clash-Squad-style formats.
 
@@ -222,6 +235,27 @@ class Tournament(ShortIdMixin, BaseModel):
         DateTime(timezone=True),
         nullable=True,
         comment="Last date slots were auto-generated for this schedule, to keep generation idempotent.",
+    )
+
+    # ------------------------------------------------------------------
+    # Simplified schedule config (Raj's flow). A schedule is always
+    # exactly one of SOLO or SQUAD per Game — no map/mode picking.
+    # `daily_slot_times` is the source of truth for how many matches get
+    # generated per day and at what time: Admin can add/remove/edit
+    # entries freely (not locked to 27 — could be 28, 29, etc.), and can
+    # edit an individual generated Match's time/fee/prize afterwards too
+    # (Match.entry_fee / Match.prize_pool override the schedule default).
+    # ------------------------------------------------------------------
+    category: Mapped[Optional[ScheduleCategory]] = mapped_column(
+        str_enum(ScheduleCategory, "schedule_category"), nullable=True, index=True
+    )
+    squad_size: Mapped[int] = mapped_column(
+        Integer, default=4, nullable=False,
+        comment="Players per squad when category=SQUAD (e.g. 4 for a 4v4 Clash Squad match). Ignored for SOLO.",
+    )
+    daily_slot_times: Mapped[Optional[list[str]]] = mapped_column(
+        PortableJSONB, nullable=True,
+        comment="List of 'HH:MM' (24h, UTC) strings, one per match generated each day. len() = matches/day.",
     )
 
     created_by: Mapped[uuid.UUID] = mapped_column(
