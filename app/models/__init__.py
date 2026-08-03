@@ -52,6 +52,7 @@ from app.models.match_result import (
     MatchResult,
     MatchResultStatus,
 )
+from app.models.match_team import MatchTeam, MatchTeamMember, MatchTeamStatus
 from app.models.match_winner import MatchWinner, WinnerAssignmentSource
 from app.models.live_match import (
     LIVE_MATCH_STATUS_TRANSITIONS,
@@ -130,6 +131,7 @@ from app.models.team_community import (
     TeamJoinRequestStatus,
 )
 from app.models.tournament import (
+    TeamFormat,
     TeamRegistrationMode,
     Tournament,
     TournamentStatus,
@@ -178,6 +180,10 @@ __all__ = [
     "MatchAssignmentType",
     "MatchCheckInStatus",
     "MATCH_CHECKIN_TRANSITIONS",
+    "MatchTeam",
+    "MatchTeamMember",
+    "MatchTeamStatus",
+    "TeamFormat",
     "AuditLog",
     "AuditAction",
     "AuditActorType",

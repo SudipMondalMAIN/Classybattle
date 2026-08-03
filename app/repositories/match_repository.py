@@ -93,6 +93,23 @@ class MatchRepository(BaseRepository[Match]):
         result = await self.session.execute(stmt)
         return result.scalars().all(), total
 
+    async def list_for_tournament_on_date(
+        self, tournament_id: UUID, target_date
+    ) -> Sequence[Match]:
+        """All slots (Matches) already generated for a recurring schedule
+        on a given calendar date, ordered by start time."""
+        stmt = (
+            select(Match)
+            .where(
+                Match.tournament_id == tournament_id,
+                func.date(Match.scheduled_start) == target_date,
+                Match.deleted_at.is_(None),
+            )
+            .order_by(asc(Match.scheduled_start))
+        )
+        result = await self.session.execute(stmt)
+        return result.scalars().all()
+
     async def next_match_number(self, tournament_id: UUID, round_number: int) -> int:
         stmt = select(func.max(Match.match_number)).where(
             Match.tournament_id == tournament_id,

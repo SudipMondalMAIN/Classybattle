@@ -4,6 +4,7 @@ Match model — Room Management & Match Lifecycle (Phase 7).
 import enum
 import uuid
 from datetime import datetime
+from decimal import Decimal
 from typing import Optional
 
 from sqlalchemy import (
@@ -14,6 +15,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    Numeric,
     String,
     Text,
     UniqueConstraint,
@@ -109,6 +111,22 @@ class Match(ShortIdMixin, BaseModel):
 
     round_number: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     match_number: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+
+    # ------------------------------------------------------------------
+    # Slot fields (recurring-schedule matches only — see
+    # Tournament.is_recurring_schedule). round_number/match_number above
+    # keep their bracket meaning for one-off tournaments; for a
+    # recurring slot, round_number stays 1 and match_number is the
+    # slot's sequence number within the day.
+    # ------------------------------------------------------------------
+    team_format: Mapped[Optional[str]] = mapped_column(
+        String(10), nullable=True,
+        comment="e.g. '1v1'/'2v2'/'3v3'/'4v4' for Clash-Squad-style slots, 'solo' otherwise.",
+    )
+    entry_fee: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(10, 2), nullable=True,
+        comment="Entry fee charged at join for this slot; falls back to the parent schedule's entry_fee if null.",
+    )
 
     # ------------------------------------------------------------------
     # Room details. Password is stored so it can be re-published/edited by

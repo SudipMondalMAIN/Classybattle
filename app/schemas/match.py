@@ -3,6 +3,7 @@ Match, Room & Check-in Pydantic schemas — Room Management & Match
 Lifecycle (Phase 7).
 """
 from datetime import datetime
+from decimal import Decimal
 from typing import Optional
 from uuid import UUID
 
@@ -176,6 +177,8 @@ class MatchRead(BaseModel):
     tournament_id: UUID
     round_number: int
     match_number: int
+    team_format: Optional[str] = None
+    entry_fee: Optional[Decimal] = None
     room_name: Optional[str] = None
     room_status: RoomStatus
     match_status: MatchStatus

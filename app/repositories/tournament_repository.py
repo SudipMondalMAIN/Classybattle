@@ -56,6 +56,20 @@ class TournamentRepository(BaseRepository[Tournament]):
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none() is not None
 
+    async def list_active_recurring_schedules(self) -> Sequence[Tournament]:
+        """All recurring schedule templates (e.g. 'Free Fire Classic',
+        'BGMI Squad') that are currently published/open and should have
+        today's slots generated."""
+        stmt = select(Tournament).where(
+            Tournament.is_recurring_schedule.is_(True),
+            Tournament.status.in_(
+                [TournamentStatus.PUBLISHED, TournamentStatus.REGISTRATION_OPEN]
+            ),
+            Tournament.deleted_at.is_(None),
+        )
+        result = await self.session.execute(stmt)
+        return result.scalars().all()
+
     async def list_paginated(
         self,
         *,

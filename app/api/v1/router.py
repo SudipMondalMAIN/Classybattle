@@ -28,6 +28,8 @@ from app.api.v1.social_routes import router as social_router
 from app.api.v1.team_community_routes import router as team_community_router
 from app.api.v1.team_routes import router as team_router
 from app.api.v1.tournament_routes import router as tournament_router
+from app.api.v1.schedule_routes import router as schedule_router
+from app.api.v1.slot_routes import router as slot_router
 from app.api.v1.user_routes import router as user_router
 from app.api.v1.wallet_routes import router as wallet_router
 
@@ -43,6 +45,8 @@ api_v1_router.include_router(game_router)
 api_v1_router.include_router(game_mode_router)
 api_v1_router.include_router(map_router)
 api_v1_router.include_router(tournament_router)
+api_v1_router.include_router(schedule_router)
+api_v1_router.include_router(slot_router)
 api_v1_router.include_router(participant_router)
 api_v1_router.include_router(prize_router)
 api_v1_router.include_router(team_router)

@@ -3,7 +3,7 @@ Tournament model — core entity for the Tournament module (Phase 2).
 """
 import enum
 import uuid
-from datetime import datetime
+from datetime import datetime, time
 from decimal import Decimal
 from typing import Optional
 
@@ -18,12 +18,13 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
+    Time,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.base import BaseModel, ShortIdMixin
-from app.database.types import str_enum
+from app.database.types import PortableJSONB, str_enum
 
 
 class TournamentStatus(str, enum.Enum):
@@ -49,6 +50,22 @@ class TeamRegistrationMode(str, enum.Enum):
     SOLO = "solo"
     TEAM_INVITE = "team_invite"
     AUTO_RANDOM = "auto_random"
+
+
+class TeamFormat(str, enum.Enum):
+    """Player-vs-player team size for Clash-Squad-style formats.
+
+    Only relevant when the schedule's game mode supports variable team
+    sizes (e.g. Free Fire Clash Squad: 1v1/2v2/3v3/4v4). Classic/Battle
+    Royale style modes (Free Fire Classic, BGMI Classic/Squad) ignore
+    this and use SOLO / fixed squad sizing from GameMode instead.
+    """
+
+    SOLO = "solo"
+    ONE_V_ONE = "1v1"
+    TWO_V_TWO = "2v2"
+    THREE_V_THREE = "3v3"
+    FOUR_V_FOUR = "4v4"
 
 
 # Explicit allowed forward transitions. Kept as data (not scattered `if`
@@ -176,6 +193,36 @@ class Tournament(ShortIdMixin, BaseModel):
     )
     team_size: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     max_teams: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+
+    # ------------------------------------------------------------------
+    # Recurring daily schedule config. When is_recurring_schedule is
+    # True, this row is not a single bracket event but a template that
+    # SlotGeneratorService uses to stamp out one `Match` (= one join-able
+    # slot, e.g. "Free Fire Classic 10:30 AM") every
+    # `slot_interval_minutes` between daily_start_time and
+    # daily_end_time, for every day. Bracket-only fields above
+    # (registration_start/end, max_players bracket sizing) are ignored
+    # for recurring schedules — join is instant, no registration window.
+    # ------------------------------------------------------------------
+    is_recurring_schedule: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False, index=True
+    )
+    daily_start_time: Mapped[Optional[time]] = mapped_column(Time, nullable=True)
+    daily_end_time: Mapped[Optional[time]] = mapped_column(Time, nullable=True)
+    slot_interval_minutes: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+
+    # Which team formats this schedule offers at join time (e.g. Free
+    # Fire Clash Squad -> ["1v1","2v2","3v3","4v4"]; BGMI -> ["solo"] or
+    # left null since BGMI has no variable-format team feature).
+    allowed_team_formats: Mapped[Optional[list[str]]] = mapped_column(
+        PortableJSONB, nullable=True
+    )
+
+    last_generated_on: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="Last date slots were auto-generated for this schedule, to keep generation idempotent.",
+    )
 
     created_by: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),

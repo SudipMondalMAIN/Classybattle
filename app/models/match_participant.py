@@ -74,7 +74,7 @@ class MatchParticipant(BaseModel):
         ),
         CheckConstraint("slot_number > 0", name="ck_match_participants_slot_positive"),
         CheckConstraint(
-            "(team_id IS NOT NULL) OR (participant_id IS NOT NULL)",
+            "(team_id IS NOT NULL) OR (participant_id IS NOT NULL) OR (match_team_id IS NOT NULL)",
             name="ck_match_participants_team_or_participant",
         ),
         Index("ix_match_participants_match_checkin", "match_id", "check_in_status"),
@@ -92,6 +92,15 @@ class MatchParticipant(BaseModel):
     team_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("teams.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    # For recurring-schedule slots (Free Fire Clash Squad etc.) — points at
+    # a per-slot MatchTeam instead of a per-tournament Team (see
+    # app/models/match_team.py for why these are separate).
+    match_team_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("match_teams.id", ondelete="CASCADE"),
         nullable=True,
         index=True,
     )
@@ -145,6 +154,9 @@ class MatchParticipant(BaseModel):
     match: Mapped["Match"] = relationship(back_populates="slots", lazy="selectin")  # noqa: F821
     team: Mapped[Optional["Team"]] = relationship(  # noqa: F821
         foreign_keys=[team_id], lazy="selectin"
+    )
+    match_team: Mapped[Optional["MatchTeam"]] = relationship(  # noqa: F821
+        foreign_keys=[match_team_id], lazy="selectin"
     )
     participant: Mapped[Optional["Participant"]] = relationship(  # noqa: F821
         foreign_keys=[participant_id], lazy="selectin"
