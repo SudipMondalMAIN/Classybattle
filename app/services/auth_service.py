@@ -57,39 +57,28 @@ class AuthService:
     # ------------------------------------------------------------------
     async def initiate_signup(self, payload: SignupRequest) -> str:
         """
-        Validate uniqueness, create an unverified user record, then
-        generate + email a signup OTP. Returns the OTP (for internal use/testing);
-        callers should not expose it to the client.
+        Validate uniqueness and generate + email a signup OTP. No row is
+        written to the `users` table at this stage — the submitted details
+        are held only inside the OTP record (hashed password included) until
+        the user verifies their email. Returns the OTP (for internal
+        use/testing); callers should not expose it to the client.
         """
         existing = await self.user_repo.exists_by_email_or_phone(payload.email, payload.phone_number)
 
-        if existing is not None and existing.is_email_verified:
+        if existing is not None:
+            # Any row in `users` at this point is, by construction, already
+            # email-verified (see verify_signup_otp), so this is always a
+            # genuine duplicate account.
             raise ConflictException("An account with this email or phone number already exists")
 
-        if existing is not None and not existing.is_email_verified:
-            # Re-use the unverified placeholder account; update details and resend OTP
-            await self.user_repo.update(
-                existing,
-                full_name=payload.full_name,
-                phone_number=payload.phone_number,
-                hashed_password=hash_password(payload.password),
-            )
-        else:
-            await self.user_repo.create(
-                full_name=payload.full_name,
-                email=payload.email.lower(),
-                phone_number=payload.phone_number,
-                hashed_password=hash_password(payload.password),
-                role=UserRole.USER,
-                is_email_verified=False,
-                is_active=True,
-                player_uid=await self._generate_unique_player_uid(),
-            )
-
-        await self.session.commit()
+        signup_payload = {
+            "full_name": payload.full_name,
+            "phone_number": payload.phone_number,
+            "hashed_password": hash_password(payload.password),
+        }
 
         otp_code = await self.otp_service.generate_and_store_otp(
-            payload.email, OTPPurpose.SIGNUP_VERIFICATION
+            payload.email, OTPPurpose.SIGNUP_VERIFICATION, signup_payload=signup_payload
         )
         await self.session.commit()
 
@@ -103,14 +92,38 @@ class AuthService:
         return otp_code
 
     async def verify_signup_otp(self, email: str, otp_code: str) -> tuple[User, str, str]:
-        """Verify signup OTP, activate the account, and issue tokens."""
-        user = await self.user_repo.get_by_email(email)
-        if user is None:
+        """Verify signup OTP, create the now-confirmed account, and issue tokens."""
+        email = email.lower()
+
+        # Already-verified accounts can't re-verify; nothing pending means no OTP exists anyway.
+        existing = await self.user_repo.get_by_email(email)
+        if existing is not None:
+            raise ConflictException("An account with this email or phone number already exists")
+
+        otp_entry = await self.otp_service.verify_otp(email, OTPPurpose.SIGNUP_VERIFICATION, otp_code)
+
+        signup_payload = otp_entry.signup_payload
+        if not signup_payload:
             raise NotFoundException("No pending signup found for this email")
 
-        await self.otp_service.verify_otp(email, OTPPurpose.SIGNUP_VERIFICATION, otp_code)
+        # Re-check uniqueness right before writing, in case another signup
+        # for the same email/phone completed verification in the meantime.
+        conflict = await self.user_repo.exists_by_email_or_phone(
+            email, signup_payload["phone_number"]
+        )
+        if conflict is not None:
+            raise ConflictException("An account with this email or phone number already exists")
 
-        user = await self.user_repo.update(user, is_email_verified=True)
+        user = await self.user_repo.create(
+            full_name=signup_payload["full_name"],
+            email=email,
+            phone_number=signup_payload["phone_number"],
+            hashed_password=signup_payload["hashed_password"],
+            role=UserRole.USER,
+            is_email_verified=True,
+            is_active=True,
+            player_uid=await self._generate_unique_player_uid(),
+        )
         await self.session.commit()
 
         access_token, refresh_token = await self._issue_tokens(user)
@@ -135,21 +148,36 @@ class AuthService:
         return user, access_token, refresh_token
 
     async def resend_otp(self, email: str, purpose: OTPPurpose) -> None:
-        user = await self.user_repo.get_by_email(email)
-        if user is None:
-            raise NotFoundException("No account found for this email")
-
-        otp_code = await self.otp_service.generate_and_store_otp(email, purpose)
-        await self.session.commit()
+        email = email.lower()
 
         if purpose == OTPPurpose.SIGNUP_VERIFICATION:
+            # No user row exists yet for a pending signup — the details live
+            # only on the most recent (still-active) signup OTP.
+            previous_otp = await self.otp_service.repo.get_latest_active(
+                email, OTPPurpose.SIGNUP_VERIFICATION
+            )
+            if previous_otp is None or not previous_otp.signup_payload:
+                raise NotFoundException("No pending signup found for this email")
+
+            otp_code = await self.otp_service.generate_and_store_otp(
+                email, purpose, signup_payload=previous_otp.signup_payload
+            )
+            await self.session.commit()
+
             await email_service.send_signup_otp(
                 to_email=email,
-                full_name=user.full_name,
+                full_name=previous_otp.signup_payload["full_name"],
                 otp=otp_code,
                 expiry_minutes=settings.OTP_EXPIRY_MINUTES,
             )
         else:
+            user = await self.user_repo.get_by_email(email)
+            if user is None:
+                raise NotFoundException("No account found for this email")
+
+            otp_code = await self.otp_service.generate_and_store_otp(email, purpose)
+            await self.session.commit()
+
             await email_service.send_password_reset_otp(
                 to_email=email,
                 full_name=user.full_name,

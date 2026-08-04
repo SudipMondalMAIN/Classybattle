@@ -21,8 +21,15 @@ class OTPService:
         self.session = session
         self.repo = OTPRepository(session)
 
-    async def generate_and_store_otp(self, email: str, purpose: OTPPurpose) -> str:
-        """Generate a new OTP, enforcing resend cooldown + hourly rate limits."""
+    async def generate_and_store_otp(
+        self, email: str, purpose: OTPPurpose, signup_payload: dict | None = None
+    ) -> str:
+        """Generate a new OTP, enforcing resend cooldown + hourly rate limits.
+
+        `signup_payload` (only relevant for OTPPurpose.SIGNUP_VERIFICATION) carries
+        the pending account details so they can be persisted to the `users` table
+        only once the OTP is verified.
+        """
         email = email.lower()
         now = datetime.now(timezone.utc)
 
@@ -53,6 +60,7 @@ class OTPService:
             expires_at=now + timedelta(minutes=settings.OTP_EXPIRY_MINUTES),
             attempts=0,
             is_used=False,
+            signup_payload=signup_payload,
         )
 
         logger.info("otp_generated", email=email, purpose=purpose.value)
