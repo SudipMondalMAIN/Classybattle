@@ -61,7 +61,7 @@ class Settings(BaseSettings):
     FIREBASE_PROJECT_ID: str = ""
 
     # ---------------- CORS ----------------
-    CORS_ORIGINS: List[str] = ["http://localhost:3000"]
+    CORS_ORIGINS: List[str] = ["*"]
 
     # ---------------- RATE LIMITING ----------------
     RATE_LIMIT_PER_MINUTE: int = 60
