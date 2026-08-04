@@ -110,6 +110,29 @@ class MatchRepository(BaseRepository[Match]):
         result = await self.session.execute(stmt)
         return result.scalars().all()
 
+    async def list_for_tournament_between(
+        self, tournament_id: UUID, start_utc, end_utc
+    ) -> Sequence[Match]:
+        """Slots whose scheduled_start falls in [start_utc, end_utc).
+        Unlike list_for_tournament_on_date (which naively compares the
+        UTC calendar date of scheduled_start), this takes explicit UTC
+        bounds — needed to correctly find "today's IST slots" for times
+        between IST midnight and 05:29, which fall on the *previous*
+        UTC calendar date.
+        """
+        stmt = (
+            select(Match)
+            .where(
+                Match.tournament_id == tournament_id,
+                Match.scheduled_start >= start_utc,
+                Match.scheduled_start < end_utc,
+                Match.deleted_at.is_(None),
+            )
+            .order_by(asc(Match.scheduled_start))
+        )
+        result = await self.session.execute(stmt)
+        return result.scalars().all()
+
     async def next_match_number(self, tournament_id: UUID, round_number: int) -> int:
         stmt = select(func.max(Match.match_number)).where(
             Match.tournament_id == tournament_id,

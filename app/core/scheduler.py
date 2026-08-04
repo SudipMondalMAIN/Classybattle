@@ -3,20 +3,19 @@ Slot Auto-Generation Scheduler.
 
 Runs a lightweight background job (via APScheduler's AsyncIOScheduler)
 inside the same event loop as the FastAPI app — no separate cron/worker
-process needed. Every SLOT_SCHEDULER_INTERVAL_MINUTES (default 10, so a
-10:00 AM match is picked up again at 10:10 AM), it generates slots for
-TODAY and TOMORROW for every active recurring schedule
-(`Tournament.is_recurring_schedule=True`).
+process needed. Every SLOT_SCHEDULER_INTERVAL_MINUTES (default 10), for
+every active recurring schedule (`Tournament.is_recurring_schedule=True`):
 
-Why both today AND tomorrow, every run (not just once after midnight):
-- Idempotent — `SlotGeneratorService.generate_for_day` no-ops if a day
-  is already generated, so re-running constantly is cheap and safe.
-- Self-healing — if the app was down at midnight, or a new schedule was
-  created mid-day, the very next tick (within 10 minutes) fixes it
-  instead of waiting for the next day's midnight run.
-- Always-a-day-ahead — a user can join tomorrow's 10:00 AM slot today,
-  because tomorrow's Match rows already exist well before tomorrow
-  starts.
+- If today (IST) has no slots generated yet at all (brand-new schedule,
+  or the app was down at midnight), it bootstraps the full day once.
+- Otherwise, it does NOT touch today or regenerate anything in bulk. It
+  only looks at today's slots whose match has already finished (played
+  out / COMPLETED, CANCELLED, or scheduled_end has passed) and creates
+  *that same slot* for tomorrow — one match at a time, and only once
+  per slot (skipped if tomorrow's slot already exists). So e.g. after
+  today's 2:00 PM match is done, tomorrow's 2:00 PM slot gets created;
+  the other 26 slots for tomorrow are left alone until their own
+  today's match finishes.
 """
 from datetime import datetime, timedelta, timezone
 
@@ -24,7 +23,8 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from app.core.logging import get_logger
 from app.database.session import AsyncSessionLocal
-from app.services.slot_generator_service import SlotGeneratorService
+from app.repositories.tournament_repository import TournamentRepository
+from app.services.slot_generator_service import IST, SlotGeneratorService
 
 logger = get_logger("slot_scheduler")
 
@@ -34,24 +34,48 @@ _scheduler: AsyncIOScheduler | None = None
 
 
 async def _generate_upcoming_slots() -> None:
-    """One tick: generate today's + tomorrow's slots for every active
-    recurring schedule. Any failure is logged and swallowed so a single
-    bad schedule can't stop the whole tick (or crash the scheduler)."""
-    today = datetime.now(timezone.utc).date()
-    tomorrow = today + timedelta(days=1)
+    """One tick, per active recurring schedule: bootstrap today if it has
+    no slots yet, otherwise top up tomorrow one slot at a time for
+    whichever of today's matches have already finished. Any failure is
+    logged and swallowed so a single bad schedule can't stop the whole
+    tick (or crash the scheduler)."""
+    today = datetime.now(IST).date()
+    # Explicit UTC bounds for "today (IST)" — matches list_for_tournament_on_date's
+    # naive func.date(scheduled_start) comparison for slots between IST
+    # 05:30 and 23:59, but is also correct for the 00:00-05:29 IST slots
+    # that func.date() would otherwise place on the previous UTC day.
+    today_start_utc = datetime.combine(today, datetime.min.time(), tzinfo=IST).astimezone(
+        timezone.utc
+    )
+    today_end_utc = today_start_utc + timedelta(days=1)
 
     async with AsyncSessionLocal() as session:
         try:
             generator = SlotGeneratorService(session)
-            for target_date in (today, tomorrow):
-                results = await generator.generate_for_all_active_schedules(target_date)
-                total = sum(len(matches) for matches in results.values())
-                logger.info(
-                    "slot_auto_generate_tick",
-                    target_date=str(target_date),
-                    schedules=len(results),
-                    matches=total,
+            tournament_repo = TournamentRepository(session)
+            schedules = await tournament_repo.list_active_recurring_schedules()
+
+            for schedule in schedules:
+                todays_matches = await generator.match_repo.list_for_tournament_between(
+                    schedule.id, today_start_utc, today_end_utc
                 )
+                if not todays_matches:
+                    created = await generator.generate_for_day(schedule, today)
+                    logger.info(
+                        "slot_bootstrap_today",
+                        tournament_id=str(schedule.id),
+                        matches=len(created),
+                    )
+                    continue
+
+                created = await generator.top_up_completed_slots_for_next_day(schedule)
+                if created:
+                    logger.info(
+                        "slot_next_day_topup",
+                        tournament_id=str(schedule.id),
+                        matches=len(created),
+                        slots=[m.scheduled_start.isoformat() for m in created],
+                    )
         except Exception:  # noqa: BLE001 - never let the scheduler die
             logger.exception("slot_auto_generate_failed")
             await session.rollback()

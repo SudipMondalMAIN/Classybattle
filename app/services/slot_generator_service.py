@@ -152,6 +152,93 @@ class SlotGeneratorService:
 
         return created
 
+    async def top_up_completed_slots_for_next_day(self, tournament: Tournament) -> list[Match]:
+        """Per-slot generation for the simplified daily_slot_times flow.
+
+        Instead of bulk-regenerating the whole day's schedule on every
+        scheduler tick, this looks only at *today's* (IST) slots for this
+        schedule and, for each one whose match has already finished
+        (COMPLETED/CANCELLED, or its scheduled_end has passed), creates
+        that same time-slot for *tomorrow* — one Match at a time, only
+        once per slot (skipped if tomorrow's slot already exists).
+        """
+        if not tournament.is_recurring_schedule or not tournament.daily_slot_times:
+            return []
+
+        now_ist = datetime.now(IST)
+        today = now_ist.date()
+        tomorrow = today + timedelta(days=1)
+
+        def ist_day_bounds_utc(day: date):
+            start_ist = datetime.combine(day, datetime.min.time(), tzinfo=IST)
+            return start_ist.astimezone(timezone.utc), (start_ist + timedelta(days=1)).astimezone(
+                timezone.utc
+            )
+
+        today_start_utc, today_end_utc = ist_day_bounds_utc(today)
+        tomorrow_start_utc, tomorrow_end_utc = ist_day_bounds_utc(tomorrow)
+
+        todays_matches = await self.match_repo.list_for_tournament_between(
+            tournament.id, today_start_utc, today_end_utc
+        )
+        tomorrows_matches = await self.match_repo.list_for_tournament_between(
+            tournament.id, tomorrow_start_utc, tomorrow_end_utc
+        )
+        tomorrow_slot_times = {
+            m.scheduled_start.astimezone(IST).strftime("%H:%M") for m in tomorrows_matches
+        }
+
+        team_format = (
+            "solo"
+            if tournament.category is None or tournament.category.value == "solo"
+            else f"{tournament.squad_size}v{tournament.squad_size}"
+        )
+
+        created: list[Match] = []
+        for match in todays_matches:
+            slot_time = match.scheduled_start.astimezone(IST).strftime("%H:%M")
+
+            if slot_time not in tournament.daily_slot_times:
+                continue  # slot removed from the template — don't recreate it
+            if slot_time in tomorrow_slot_times:
+                continue  # already generated for tomorrow
+
+            is_finished = match.match_status in (MatchStatus.COMPLETED, MatchStatus.CANCELLED)
+            is_past = match.scheduled_end is not None and now_ist >= match.scheduled_end.astimezone(IST)
+            if not (is_finished or is_past):
+                continue  # today's match for this slot hasn't happened yet
+
+            hour, minute = (int(p) for p in slot_time.split(":")[:2])
+            start_ist = datetime.combine(tomorrow, datetime.min.time(), tzinfo=IST).replace(
+                hour=hour, minute=minute
+            )
+            start = start_ist.astimezone(timezone.utc)
+            slot_number = await self.match_repo.next_match_number(tournament.id, round_number=1)
+            new_match = await self.match_repo.create(
+                tournament_id=tournament.id,
+                round_number=1,
+                match_number=slot_number,
+                scheduled_start=start,
+                scheduled_end=start + timedelta(minutes=30),
+                team_format=team_format,
+                entry_fee=tournament.entry_fee,
+                prize_pool=tournament.prize_pool,
+                match_status=MatchStatus.SCHEDULED,
+                room_status=RoomStatus.NOT_CREATED,
+                auto_disqualify_on_no_show=True,
+                created_by=tournament.created_by,
+            )
+            created.append(new_match)
+            tomorrow_slot_times.add(slot_time)
+
+        if created:
+            tournament.last_generated_on = datetime.now(timezone.utc)
+            await self.session.commit()
+            for match in created:
+                await self.session.refresh(match)
+
+        return created
+
     async def generate_for_all_active_schedules(
         self, target_date: Optional[date] = None
     ) -> dict[UUID, list[Match]]:

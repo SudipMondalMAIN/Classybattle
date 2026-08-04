@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import ConflictException, NotFoundException, ValidationException
 from app.models.match import Match
+from app.services.slot_generator_service import IST
 from app.models.tournament import ScheduleCategory, Tournament, TournamentStatus, TournamentVisibility
 from app.models.user import User
 from app.repositories.game_repository import GameRepository
@@ -128,7 +129,11 @@ class ScheduleService:
         self, schedule_id: UUID, target_date: Optional[date] = None
     ) -> list[Match]:
         schedule = await self._get_schedule(schedule_id)
-        target_date = target_date or datetime.now(timezone.utc).date()
+        # Must match the IST calendar date used everywhere else this is
+        # generated (scheduler tick, generate_all_today) — otherwise this
+        # manual trigger disagrees with them near IST midnight and causes
+        # duplicate match generation.
+        target_date = target_date or datetime.now(IST).date()
         return await self.slot_generator.generate_for_day(schedule, target_date)
 
     async def generate_all_today(self) -> dict:
@@ -140,7 +145,7 @@ class ScheduleService:
         self, schedule_id: UUID, target_date: Optional[date] = None
     ) -> Sequence[Match]:
         schedule = await self._get_schedule(schedule_id)
-        target_date = target_date or datetime.now(timezone.utc).date()
+        target_date = target_date or datetime.now(IST).date()
         from app.repositories.match_repository import MatchRepository
 
         return await MatchRepository(self.session).list_for_tournament_on_date(
