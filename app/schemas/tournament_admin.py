@@ -1,39 +1,28 @@
 """
-Admin match-details page schemas — Raj's flow: Admin opens one match,
-sees everyone who joined (with their in-game nickname + UID), enters
-kills, declares winner(s), and pays out the winning amount directly
-from this page.
+Tournament Admin schemas -- powers the admin "tournament details" page:
+who joined, kills, winner declaration, and winning-amount payout.
 """
 from datetime import datetime
 from decimal import Decimal
-from typing import Any, Optional
+from typing import Optional
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel
 
 
 class MatchAdminPlayerRead(BaseModel):
-    """One joined player — solo joiner, or one member of a squad team."""
-
-    model_config = ConfigDict(from_attributes=True)
-
     user_id: UUID
-    full_name: str
-    phone_number: str
+    full_name: Optional[str] = None
+    phone_number: Optional[str] = None
     game_nickname: Optional[str] = None
     game_uid: Optional[str] = None
-
-    # Which slot they occupy — useful for squad matches (group teammates
-    # together in the UI).
     team_name: Optional[str] = None
     team_id: Optional[UUID] = None
-
     kills: int = 0
     is_winner: bool = False
     winning_amount: Optional[Decimal] = None
     winning_paid_at: Optional[datetime] = None
-
-    joined_at: datetime
+    joined_at: Optional[datetime] = None
 
 
 class MatchAdminDetailRead(BaseModel):
@@ -48,18 +37,18 @@ class MatchAdminDetailRead(BaseModel):
     match_status: str
     room_id: Optional[str] = None
     room_password: Optional[str] = None
-    entry_fee: Optional[Decimal] = None
-    prize_pool: Optional[Decimal] = None
+    entry_fee: Decimal
+    prize_pool: Decimal
     total_joined: int
     max_players: int
     players: list[MatchAdminPlayerRead]
 
 
 class DeclareResultRequest(BaseModel):
-    kills: Optional[int] = Field(None, ge=0)
+    kills: Optional[int] = None
     is_winner: Optional[bool] = None
 
 
 class PayWinnerRequest(BaseModel):
-    amount: Decimal = Field(..., gt=0)
-    note: Optional[str] = Field(None, max_length=255)
+    amount: Decimal
+    note: Optional[str] = None

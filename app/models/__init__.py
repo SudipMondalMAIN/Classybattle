@@ -53,16 +53,6 @@ from app.models.tournament_result import (
 )
 from app.models.tournament_team import TournamentTeam, TournamentTeamMember, TournamentTeamStatus
 from app.models.tournament_winner import TournamentWinner, WinnerAssignmentSource
-from app.models.live_match import (
-    LIVE_MATCH_STATUS_TRANSITIONS,
-    LiveMatch,
-    LiveMatchEvent,
-    LiveMatchEventType,
-    LiveMatchScore,
-    LiveMatchStatus,
-    LiveTournamentState,
-    LiveTournamentStatus,
-)
 from app.models.notification import (
     Notification,
     NotificationChannel,
@@ -203,14 +193,6 @@ __all__ = [
     "TOURNAMENT_RESULT_STATUS_TRANSITIONS",
     "TournamentWinner",
     "WinnerAssignmentSource",
-    "LiveMatch",
-    "LiveMatchStatus",
-    "LIVE_MATCH_STATUS_TRANSITIONS",
-    "LiveMatchEvent",
-    "LiveMatchEventType",
-    "LiveMatchScore",
-    "LiveTournamentState",
-    "LiveTournamentStatus",
     "PlayerStatistics",
     "TeamStatistics",
     "PlayerPeriodStats",

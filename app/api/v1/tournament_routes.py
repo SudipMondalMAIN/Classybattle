@@ -19,7 +19,9 @@ from app.schemas.tournament import (
     TournamentAssetUploadResponse,
     TournamentCreate,
     TournamentListItem,
+    TournamentPublishRoom,
     TournamentRead,
+    TournamentRoomRead,
     TournamentStatusUpdate,
     TournamentUpdate,
 )
@@ -28,16 +30,11 @@ from app.services.tournament_service import TournamentService
 router = APIRouter(prefix="/tournaments", tags=["Tournaments"])
 
 # Convenience aliases the frontend can send instead of (or alongside) the
-# exact TournamentStatus enum values. "upcoming" isn't a stored status by
-# itself — it's a friendly name for "hasn't gone live yet".
+# exact TournamentStatus enum values.
 _STATUS_ALIASES: dict[str, list[TournamentStatus]] = {
-    "upcoming": [
-        TournamentStatus.PUBLISHED,
-        TournamentStatus.REGISTRATION_OPEN,
-        TournamentStatus.REGISTRATION_CLOSED,
-    ],
+    "upcoming": [TournamentStatus.SCHEDULED],
     "ongoing": [TournamentStatus.LIVE],
-    "past": [TournamentStatus.COMPLETED, TournamentStatus.ARCHIVED, TournamentStatus.CANCELLED],
+    "past": [TournamentStatus.COMPLETED, TournamentStatus.CANCELLED],
 }
 
 
@@ -157,6 +154,33 @@ async def update_tournament_status(
     service = TournamentService(session)
     tournament = await service.update_status(tournament_id, payload.status, current_user)
     return TournamentRead.model_validate(tournament)
+
+
+@router.post("/{tournament_id}/publish-room", response_model=TournamentRead)
+async def publish_room(
+    tournament_id: UUID,
+    payload: TournamentPublishRoom,
+    current_user: User = Depends(require_admin),
+    session: AsyncSession = Depends(get_db_session),
+):
+    """Admin sets room_id/room_password -> tournament auto-flips to LIVE."""
+    service = TournamentService(session)
+    tournament = await service.publish_room(
+        tournament_id, payload.room_id, payload.room_password, current_user
+    )
+    return TournamentRead.model_validate(tournament)
+
+
+@router.get("/{tournament_id}/room", response_model=TournamentRoomRead)
+async def get_room(
+    tournament_id: UUID,
+    current_user: User = Depends(get_current_active_verified_user),
+    session: AsyncSession = Depends(get_db_session),
+):
+    """Room credentials -- visible only to registered participants/admins."""
+    service = TournamentService(session)
+    tournament = await service.get_room_info(tournament_id, current_user)
+    return TournamentRoomRead.model_validate(tournament)
 
 
 @router.delete("/{tournament_id}", response_model=MessageResponse)

@@ -171,16 +171,16 @@ class TournamentService:
             prize_pool=payload.prize_pool,
             max_players=payload.max_players,
             current_players=0,
-            registration_start=payload.registration_start,
-            registration_end=payload.registration_end,
-            tournament_start=payload.tournament_start,
-            tournament_end=payload.tournament_end,
             visibility=payload.visibility,
             is_featured=payload.is_featured,
             registration_mode=payload.registration_mode,
             team_size=payload.team_size,
             max_teams=payload.max_teams,
-            status=TournamentStatus.DRAFT,
+            is_recurring_schedule=payload.is_recurring_schedule,
+            daily_slot_times=payload.daily_slot_times,
+            category=payload.category,
+            squad_size=payload.squad_size,
+            status=TournamentStatus.SCHEDULED,
             created_by=current_user.id,
         )
         await self.audit.record(
@@ -284,18 +284,6 @@ class TournamentService:
             new_map_id = update_data.get("map_id", tournament.map_id)
             await self._assert_mode_and_map_valid(tournament.game_id, new_mode_id, new_map_id)
 
-        reg_start = update_data.get("registration_start", tournament.registration_start)
-        reg_end = update_data.get("registration_end", tournament.registration_end)
-        t_start = update_data.get("tournament_start", tournament.tournament_start)
-        t_end = update_data.get("tournament_end", tournament.tournament_end)
-
-        if reg_end <= reg_start:
-            raise ValidationException("registration_end must be after registration_start")
-        if t_end <= t_start:
-            raise ValidationException("tournament_end must be after tournament_start")
-        if t_start < reg_start:
-            raise ValidationException("tournament_start cannot be before registration_start")
-
         old_values = {key: getattr(tournament, key) for key in update_data}
         tournament = await self.repo.update(tournament, **update_data)
         await self.audit.record(
@@ -365,6 +353,72 @@ class TournamentService:
             )
 
         return tournament
+
+    # ------------------------------------------------------------------
+    # Room publish / auto-complete (folded in from LiveMatch/live_match_service)
+    # ------------------------------------------------------------------
+    async def publish_room(
+        self, tournament_id: UUID, room_id: str, room_password: str, current_user: User
+    ) -> Tournament:
+        """Admin sets room_id/room_password -> tournament auto-flips to LIVE
+        and is stamped to auto-complete 40 minutes later."""
+        from datetime import datetime, timedelta, timezone
+
+        tournament = await self.get_by_id(tournament_id)
+        self._assert_can_manage(tournament, current_user)
+        self._assert_valid_status_transition(tournament.status, TournamentStatus.LIVE)
+
+        now = datetime.now(timezone.utc)
+        tournament = await self.repo.update(
+            tournament,
+            room_id=room_id,
+            room_password=room_password,
+            status=TournamentStatus.LIVE,
+            published_at=now,
+            auto_complete_at=now + timedelta(minutes=40),
+        )
+        await self.audit.record(
+            entity="tournament",
+            action=AuditAction.STATUS_CHANGE,
+            entity_id=tournament.id,
+            actor=current_user,
+            new_values={"status": TournamentStatus.LIVE, "room_id": room_id},
+            description=f"Room published for tournament '{tournament.title}'",
+        )
+        await self.session.commit()
+
+        from app.models.notification import NotificationEventType
+
+        await self._notify_participants(
+            tournament,
+            event_type=NotificationEventType.TOURNAMENT_UPDATED,
+            title="Room details published",
+            body=f"Room ID and password for '{tournament.title}' are now available.",
+            event_key_prefix=f"tournament_room_published:{tournament.id}",
+        )
+        return tournament
+
+    async def get_room_info(self, tournament_id: UUID, current_user: User) -> Tournament:
+        """Only participants (or admins) may view room credentials."""
+        tournament = await self.get_by_id(tournament_id)
+        if not self._is_admin(current_user):
+            participant = await self.participant_repo.get_by_tournament_and_user(
+                tournament_id, current_user.id
+            )
+            if participant is None:
+                raise ForbiddenException("You are not registered for this tournament")
+        return tournament
+
+    async def auto_complete_due_tournaments(self) -> int:
+        """Scheduler tick: flips every LIVE tournament whose
+        auto_complete_at has passed to COMPLETED. Returns the count
+        completed."""
+        due = await self.repo.list_live_past_auto_complete()
+        for tournament in due:
+            await self.repo.update(tournament, status=TournamentStatus.COMPLETED)
+        if due:
+            await self.session.commit()
+        return len(due)
 
     async def soft_delete_tournament(self, tournament_id: UUID, current_user: User) -> None:
         tournament = await self.get_by_id(tournament_id)

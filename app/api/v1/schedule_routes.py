@@ -19,7 +19,7 @@ from app.schemas.schedule import (
     ScheduleRead,
     ScheduleUpdate,
 )
-from app.schemas.slot_join import SlotRead
+from app.schemas.tournament import TournamentListItem as SlotRead
 from app.services.schedule_service import ScheduleService
 
 router = APIRouter(tags=["Match Schedules"])

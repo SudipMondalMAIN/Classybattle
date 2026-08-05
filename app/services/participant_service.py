@@ -155,17 +155,14 @@ class ParticipantService:
         if tournament.deleted_at is not None:
             raise NotFoundException("Tournament not found")
 
-        if tournament.status != TournamentStatus.REGISTRATION_OPEN:
+        # Match-refactor: no registration window -- join is instant any
+        # time the tournament is SCHEDULED (gated only by capacity, see
+        # _assert_capacity_available).
+        if tournament.status != TournamentStatus.SCHEDULED:
             raise ValidationException(
-                f"Registration is not open for this tournament "
+                f"This tournament is not open to join "
                 f"(current status: '{tournament.status.value}')"
             )
-
-        now = datetime.now(timezone.utc)
-        if now < tournament.registration_start:
-            raise ValidationException("Registration has not started yet")
-        if now > tournament.registration_end:
-            raise ValidationException("Registration window has closed")
 
     async def _assert_capacity_available(self, tournament: Tournament) -> None:
         active_count = await self.repo.count_active_for_tournament(tournament.id)

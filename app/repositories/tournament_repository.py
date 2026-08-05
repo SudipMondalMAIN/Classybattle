@@ -1,5 +1,5 @@
 """
-Tournament repository — queries specific to the Tournament module.
+Tournament repository -- queries specific to the Tournament module.
 """
 from typing import Optional, Sequence, Union
 from uuid import UUID
@@ -12,8 +12,6 @@ from app.repositories.base import BaseRepository
 
 _SORTABLE_FIELDS = {
     "created_at": Tournament.created_at,
-    "tournament_start": Tournament.tournament_start,
-    "registration_start": Tournament.registration_start,
     "prize_pool": Tournament.prize_pool,
     "entry_fee": Tournament.entry_fee,
     "title": Tournament.title,
@@ -59,8 +57,8 @@ class TournamentRepository(BaseRepository[Tournament]):
     async def get_active_schedule_for_game_category(
         self, game_id: UUID, category
     ) -> Optional[Tournament]:
-        """One SOLO schedule + one SQUAD schedule per game (Raj's simplified
-        flow) — used to block accidental duplicates on create."""
+        """One SOLO schedule + one SQUAD schedule per game -- used to block
+        accidental duplicate templates on create."""
         stmt = select(Tournament).where(
             Tournament.game_id == game_id,
             Tournament.category == category,
@@ -72,13 +70,39 @@ class TournamentRepository(BaseRepository[Tournament]):
 
     async def list_active_recurring_schedules(self) -> Sequence[Tournament]:
         """All recurring schedule templates (e.g. 'Free Fire Classic',
-        'BGMI Squad') that are currently published/open and should have
-        today's slots generated."""
+        'BGMI Squad') that should have today's slots generated. A template
+        row itself is never SCHEDULED/LIVE/etc (those statuses apply to the
+        generated child Tournament rows) so this simply looks for any
+        non-deleted, non-cancelled template."""
         stmt = select(Tournament).where(
             Tournament.is_recurring_schedule.is_(True),
-            Tournament.status.in_(
-                [TournamentStatus.PUBLISHED, TournamentStatus.REGISTRATION_OPEN]
-            ),
+            Tournament.status != TournamentStatus.CANCELLED,
+            Tournament.deleted_at.is_(None),
+        )
+        result = await self.session.execute(stmt)
+        return result.scalars().all()
+
+    async def list_generated_slots_for_template(
+        self, template_slug: str, target_date_iso: str
+    ) -> Sequence[Tournament]:
+        """Child slots generated from a template for one day, identified by
+        the deterministic slug prefix `<template_slug>-<date>-`."""
+        stmt = select(Tournament).where(
+            Tournament.slug.like(f"{template_slug}-{target_date_iso}-%"),
+            Tournament.deleted_at.is_(None),
+        )
+        result = await self.session.execute(stmt)
+        return result.scalars().all()
+
+    async def list_live_past_auto_complete(self) -> Sequence[Tournament]:
+        """LIVE tournaments whose auto_complete_at has already passed --
+        used by the scheduler tick that flips them to COMPLETED."""
+        from datetime import datetime, timezone
+
+        stmt = select(Tournament).where(
+            Tournament.status == TournamentStatus.LIVE,
+            Tournament.auto_complete_at.is_not(None),
+            Tournament.auto_complete_at <= datetime.now(timezone.utc),
             Tournament.deleted_at.is_(None),
         )
         result = await self.session.execute(stmt)

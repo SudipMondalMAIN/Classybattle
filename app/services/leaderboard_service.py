@@ -55,9 +55,9 @@ from app.models.leaderboard import (
     TeamPeriodStats,
     TeamStatistics,
 )
-from app.models.match import Match
-from app.models.match_result import MatchResult
-from app.models.match_winner import MatchWinner
+from app.models.tournament import Tournament
+from app.models.tournament_result import TournamentResult
+from app.models.tournament_winner import TournamentWinner
 from app.repositories.leaderboard_repository import (
     LeaderboardUpdateLogRepository,
     PlayerPeriodStatsRepository,
@@ -66,7 +66,7 @@ from app.repositories.leaderboard_repository import (
     TeamPeriodStatsRepository,
     TeamStatisticsRepository,
 )
-from app.repositories.match_participant_repository import MatchParticipantRepository
+from app.repositories.tournament_participant_repository import TournamentParticipantRepository
 from app.repositories.participant_repository import ParticipantRepository
 from app.repositories.team_member_repository import TeamMemberRepository
 from app.services.audit_service import AuditService
@@ -138,7 +138,7 @@ class LeaderboardService:
         self.team_period_repo = TeamPeriodStatsRepository(session)
         self.rank_history_repo = RankHistoryRepository(session)
         self.update_log_repo = LeaderboardUpdateLogRepository(session)
-        self.match_participant_repo = MatchParticipantRepository(session)
+        self.match_participant_repo = TournamentParticipantRepository(session)
         self.team_member_repo = TeamMemberRepository(session)
         self.participant_repo = ParticipantRepository(session)
         self.audit = AuditService(session)
@@ -159,13 +159,13 @@ class LeaderboardService:
     # 1. Match completion -> player/team statistics + period stats
     # ------------------------------------------------------------------
     async def record_match_completion(
-        self, *, match: Match, result: MatchResult, winners: Sequence[MatchWinner]
+        self, *, match: Tournament, result: TournamentResult, winners: Sequence[TournamentWinner]
     ) -> None:
         source_id = str(result.id)
         if await self.update_log_repo.exists(LeaderboardSourceEvent.MATCH_COMPLETED, source_id):
             return  # Already folded into statistics — safe no-op on retry.
 
-        slots = await self.match_participant_repo.list_for_match(match.id)
+        slots = await self.match_participant_repo.list_for_tournament(match.id)
         winner_participant_ids = {w.participant_id for w in winners if w.participant_id}
         winner_team_ids = {w.team_id for w in winners if w.team_id}
         winners_by_rank1 = [w for w in winners if w.rank == 1]

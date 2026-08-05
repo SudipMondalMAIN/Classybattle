@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundException
 from app.core.logging import get_logger
-from app.models.match_result import MatchResult, MatchResultStatus
+from app.models.tournament_result import TournamentResult as MatchResult, TournamentResultStatus as MatchResultStatus
 from app.models.participant import Participant
 from app.models.security import (
     FraudFlag,

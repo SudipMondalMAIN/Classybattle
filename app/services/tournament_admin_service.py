@@ -20,7 +20,7 @@ from app.models.user import User
 from app.repositories.game_repository import GameRepository, UserGameProfileRepository
 from app.repositories.tournament_participant_repository import TournamentParticipantRepository
 from app.repositories.tournament_repository import TournamentRepository
-from app.schemas.match_admin import MatchAdminDetailRead, MatchAdminPlayerRead
+from app.schemas.tournament_admin import MatchAdminDetailRead, MatchAdminPlayerRead
 from app.services.wallet_service import WalletService
 
 _WALLET_WINNING_REF_TYPE = "tournament_winning_payout"

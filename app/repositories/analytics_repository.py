@@ -14,7 +14,7 @@ from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.match import Match, MatchStatus
+
 from app.models.participant import Participant
 from app.models.prize import PrizePayout, PrizePayoutStatus, PrizePool
 from app.models.security import AnalyticsMetricType, AnalyticsPeriodType, AnalyticsSnapshot
@@ -49,7 +49,13 @@ class AnalyticsRepository:
         return int((await self.session.execute(stmt)).scalar_one())
 
     async def count_total_matches(self) -> int:
-        stmt = select(func.count()).select_from(Match).where(Match.deleted_at.is_(None))
+        """Match-refactor: a "match" is now a generated (non-template)
+        Tournament slot row."""
+        stmt = (
+            select(func.count())
+            .select_from(Tournament)
+            .where(Tournament.deleted_at.is_(None), Tournament.is_recurring_schedule.is_(False))
+        )
         return int((await self.session.execute(stmt)).scalar_one())
 
     async def count_active_tournaments(self) -> int:
@@ -58,14 +64,7 @@ class AnalyticsRepository:
             .select_from(Tournament)
             .where(
                 Tournament.deleted_at.is_(None),
-                Tournament.status.in_(
-                    [
-                        TournamentStatus.PUBLISHED,
-                        TournamentStatus.REGISTRATION_OPEN,
-                        TournamentStatus.REGISTRATION_CLOSED,
-                        TournamentStatus.LIVE,
-                    ]
-                ),
+                Tournament.status.in_([TournamentStatus.SCHEDULED, TournamentStatus.LIVE]),
             )
         )
         return int((await self.session.execute(stmt)).scalar_one())
@@ -73,18 +72,11 @@ class AnalyticsRepository:
     async def count_active_matches(self) -> int:
         stmt = (
             select(func.count())
-            .select_from(Match)
+            .select_from(Tournament)
             .where(
-                Match.deleted_at.is_(None),
-                Match.match_status.in_(
-                    [
-                        MatchStatus.SCHEDULED,
-                        MatchStatus.ROOM_PUBLISHED,
-                        MatchStatus.CHECK_IN_OPEN,
-                        MatchStatus.READY,
-                        MatchStatus.LIVE,
-                    ]
-                ),
+                Tournament.deleted_at.is_(None),
+                Tournament.is_recurring_schedule.is_(False),
+                Tournament.status.in_([TournamentStatus.SCHEDULED, TournamentStatus.LIVE]),
             )
         )
         return int((await self.session.execute(stmt)).scalar_one())
@@ -173,10 +165,15 @@ class AnalyticsRepository:
     async def match_series(
         self, start: datetime, end: datetime, period_type: AnalyticsPeriodType
     ) -> Sequence[tuple[Any, int]]:
-        bucket = self._bucket_expr(Match.created_at, period_type)
+        bucket = self._bucket_expr(Tournament.created_at, period_type)
         stmt = (
             select(bucket.label("bucket"), func.count())
-            .where(Match.created_at >= start, Match.created_at < end, Match.deleted_at.is_(None))
+            .where(
+                Tournament.created_at >= start,
+                Tournament.created_at < end,
+                Tournament.deleted_at.is_(None),
+                Tournament.is_recurring_schedule.is_(False),
+            )
             .group_by(bucket)
             .order_by(bucket)
         )

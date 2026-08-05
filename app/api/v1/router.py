@@ -14,10 +14,6 @@ from app.api.v1.game_routes import router as game_router
 from app.api.v1.health_routes import router as health_router
 from app.api.v1.leaderboard_routes import router as leaderboard_router
 from app.api.v1.map_routes import router as map_router
-from app.api.v1.match_result_routes import router as match_result_router
-from app.api.v1.live_match_routes import router as live_match_router
-from app.api.v1.match_routes import router as match_router
-from app.api.v1.match_admin_routes import router as match_admin_router
 from app.api.v1.moderation_routes import router as moderation_router
 from app.api.v1.notification_routes import router as notification_router
 from app.api.v1.participant_routes import router as participant_router
@@ -52,10 +48,6 @@ api_v1_router.include_router(prize_router)
 api_v1_router.include_router(team_router)
 api_v1_router.include_router(team_community_router)
 api_v1_router.include_router(tournament_router)
-api_v1_router.include_router(match_router)
-api_v1_router.include_router(match_admin_router)
-api_v1_router.include_router(match_result_router)
-api_v1_router.include_router(live_match_router)
 api_v1_router.include_router(notification_router)
 api_v1_router.include_router(leaderboard_router)
 api_v1_router.include_router(social_router)

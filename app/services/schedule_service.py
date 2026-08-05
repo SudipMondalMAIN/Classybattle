@@ -1,30 +1,25 @@
 """
-Schedule Service — admin management of the simplified daily match
+Schedule Service -- admin management of the simplified daily tournament
 config: pick a Game + category (SOLO/SQUAD), set entry fee, prize pool,
-per-slot capacity and a list of match times. SlotGeneratorService turns
-this into actual join-able Match rows every day.
+per-slot capacity and a list of slot times. SlotGeneratorService turns
+this into actual join-able `Tournament` slot rows every day.
 
-A schedule is a `Tournament` row with `is_recurring_schedule=True`.
-Legacy bracket-only columns (title, registration window, tournament
-window, visibility, status) still exist on the model for backward
-compatibility but are filled with harmless defaults here — the
-simplified flow never surfaces them to Admin.
+A schedule is a `Tournament` row with `is_recurring_schedule=True`. The
+template row itself is never joined directly -- it just holds config.
 """
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime
 from typing import Optional, Sequence
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import ConflictException, NotFoundException, ValidationException
-from app.models.match import Match
-from app.services.slot_generator_service import IST
-from app.models.tournament import ScheduleCategory, Tournament, TournamentStatus, TournamentVisibility
+from app.models.tournament import Tournament, TournamentStatus, TournamentVisibility
 from app.models.user import User
 from app.repositories.game_repository import GameRepository
 from app.repositories.tournament_repository import TournamentRepository
 from app.schemas.schedule import ScheduleCreate, ScheduleUpdate
-from app.services.slot_generator_service import SlotGeneratorService
+from app.services.slot_generator_service import IST, SlotGeneratorService
 from app.utils.slug import slugify
 
 
@@ -51,7 +46,7 @@ class ScheduleService:
         )
         if existing is not None:
             raise ConflictException(
-                f"A {payload.category.value} schedule already exists for this game — "
+                f"A {payload.category.value} schedule already exists for this game -- "
                 "edit it instead of creating a duplicate."
             )
 
@@ -62,21 +57,15 @@ class ScheduleService:
             suffix += 1
             slug = f"{base_slug}-{suffix}"
 
-        now = datetime.now(timezone.utc)
-        far_future = now + timedelta(days=3650)
-
         tournament = await self.repo.create(
-            # Legacy bracket-only fields — meaningless here, wide/harmless defaults.
-            title=f"{game.name} — {payload.category.value.title()}",
+            # Template row -- never joined directly, so status/visibility
+            # here are just harmless defaults.
+            title=f"{game.name} - {payload.category.value.title()}",
             slug=slug,
             organizer="System",
             current_players=0,
-            registration_start=now,
-            registration_end=far_future,
-            tournament_start=now,
-            tournament_end=far_future,
             visibility=TournamentVisibility.PUBLIC,
-            status=TournamentStatus.PUBLISHED,
+            status=TournamentStatus.SCHEDULED,
             is_recurring_schedule=True,
             # Real config Admin actually sets:
             game_id=payload.game_id,
@@ -127,27 +116,25 @@ class ScheduleService:
 
     async def generate_slots(
         self, schedule_id: UUID, target_date: Optional[date] = None
-    ) -> list[Match]:
+    ) -> list[Tournament]:
         schedule = await self._get_schedule(schedule_id)
         # Must match the IST calendar date used everywhere else this is
-        # generated (scheduler tick, generate_all_today) — otherwise this
+        # generated (scheduler tick, generate_all_today) -- otherwise this
         # manual trigger disagrees with them near IST midnight and causes
-        # duplicate match generation.
+        # duplicate slot generation.
         target_date = target_date or datetime.now(IST).date()
         return await self.slot_generator.generate_for_day(schedule, target_date)
 
     async def generate_all_today(self) -> dict:
-        """Meant to be hit by a daily cron shortly after midnight — generates
-        today's matches for every active game schedule in one call."""
+        """Meant to be hit by a daily cron shortly after midnight -- generates
+        today's slots for every active game schedule in one call."""
         return await self.slot_generator.generate_for_all_active_schedules()
 
     async def list_slots_for_day(
         self, schedule_id: UUID, target_date: Optional[date] = None
-    ) -> Sequence[Match]:
+    ) -> Sequence[Tournament]:
         schedule = await self._get_schedule(schedule_id)
         target_date = target_date or datetime.now(IST).date()
-        from app.repositories.match_repository import MatchRepository
-
-        return await MatchRepository(self.session).list_for_tournament_on_date(
-            schedule.id, target_date
+        return await self.repo.list_generated_slots_for_template(
+            schedule.slug, target_date.isoformat()
         )
