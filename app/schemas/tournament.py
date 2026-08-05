@@ -89,6 +89,8 @@ class TournamentPublishRoom(BaseModel):
 
 
 class TournamentRoomRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     room_id: Optional[str] = None
     room_password: Optional[str] = None
     published_at: Optional[datetime] = None
