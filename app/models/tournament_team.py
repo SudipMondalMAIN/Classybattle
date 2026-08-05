@@ -1,10 +1,10 @@
 """
-MatchTeam / MatchTeamMember — per-slot teams for recurring-schedule
+TournamentTeam / TournamentTeamMember — per-slot teams for recurring-schedule
 matches (Free Fire Clash Squad style 1v1/2v2/3v3/4v4).
 
 Unlike `Team` (Phase 6), which is scoped to a whole Tournament and
-allows only one team per user per tournament, a `MatchTeam` is scoped
-to a single `Match` (= one time slot, e.g. "Free Fire Clash Squad,
+allows only one team per user per tournament, a `TournamentTeam` is scoped
+to a single `Tournament` (= one time slot, e.g. "Free Fire Clash Squad,
 2v2, 8:00 PM"). This lets the same user form a fresh team with
 different friends in a different slot every day, which is exactly how
 Clash Squad join-with-friends-or-random is meant to work.
@@ -34,27 +34,27 @@ from app.database.types import str_enum
 from app.models.team import generate_invite_code
 
 
-class MatchTeamStatus(str, enum.Enum):
+class TournamentTeamStatus(str, enum.Enum):
     FORMING = "forming"
     LOCKED = "locked"
     DISBANDED = "disbanded"
 
 
-class MatchTeam(BaseModel):
-    __tablename__ = "match_teams"
+class TournamentTeam(BaseModel):
+    __tablename__ = "tournament_teams"
     __table_args__ = (
-        UniqueConstraint("invite_code", name="uq_match_teams_invite_code"),
-        CheckConstraint("team_size > 0", name="ck_match_teams_team_size_positive"),
+        UniqueConstraint("invite_code", name="uq_tournament_teams_invite_code"),
+        CheckConstraint("team_size > 0", name="ck_tournament_teams_team_size_positive"),
         CheckConstraint(
             "current_members >= 0 AND current_members <= team_size",
-            name="ck_match_teams_current_members_within_bounds",
+            name="ck_tournament_teams_current_members_within_bounds",
         ),
-        Index("ix_match_teams_match_status", "match_id", "status"),
+        Index("ix_tournament_teams_tournament_status", "tournament_id", "status"),
     )
 
-    match_id: Mapped[uuid.UUID] = mapped_column(
+    tournament_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("matches.id", ondelete="CASCADE"),
+        ForeignKey("tournaments.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
@@ -71,8 +71,8 @@ class MatchTeam(BaseModel):
         String(16), unique=True, index=True, nullable=False, default=generate_invite_code
     )
 
-    # team_format mirrors Match.team_format (e.g. "2v2") — duplicated here
-    # so a MatchTeam's own size is self-describing without a join.
+    # team_format mirrors Tournament.team_format (e.g. "2v2") — duplicated here
+    # so a TournamentTeam's own size is self-describing without a join.
     team_format: Mapped[str] = mapped_column(String(10), nullable=False)
     team_size: Mapped[int] = mapped_column(Integer, nullable=False)
     current_members: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
@@ -82,35 +82,35 @@ class MatchTeam(BaseModel):
     # as opposed to a friend group that used create/invite.
     is_random: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
 
-    status: Mapped[MatchTeamStatus] = mapped_column(
-        str_enum(MatchTeamStatus, "match_team_status"),
-        default=MatchTeamStatus.FORMING,
+    status: Mapped[TournamentTeamStatus] = mapped_column(
+        str_enum(TournamentTeamStatus, "tournament_team_status"),
+        default=TournamentTeamStatus.FORMING,
         nullable=False,
         index=True,
     )
 
-    match: Mapped["Match"] = relationship(lazy="selectin")  # noqa: F821
+    tournament: Mapped["Tournament"] = relationship(lazy="selectin")  # noqa: F821
     captain: Mapped[Optional["User"]] = relationship(lazy="selectin")  # noqa: F821
-    members: Mapped[list["MatchTeamMember"]] = relationship(
-        back_populates="match_team", cascade="all, delete-orphan", lazy="selectin"
+    members: Mapped[list["TournamentTeamMember"]] = relationship(
+        back_populates="tournament_team", cascade="all, delete-orphan", lazy="selectin"
     )
 
     def __repr__(self) -> str:
         return (
-            f"<MatchTeam id={self.id} match_id={self.match_id} "
+            f"<TournamentTeam id={self.id} tournament_id={self.tournament_id} "
             f"format={self.team_format} status={self.status}>"
         )
 
 
-class MatchTeamMember(BaseModel):
-    __tablename__ = "match_team_members"
+class TournamentTeamMember(BaseModel):
+    __tablename__ = "tournament_team_members"
     __table_args__ = (
-        UniqueConstraint("match_team_id", "user_id", name="uq_match_team_members_team_user"),
+        UniqueConstraint("tournament_team_id", "user_id", name="uq_tournament_team_members_team_user"),
     )
 
-    match_team_id: Mapped[uuid.UUID] = mapped_column(
+    tournament_team_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("match_teams.id", ondelete="CASCADE"),
+        ForeignKey("tournament_teams.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
@@ -121,7 +121,7 @@ class MatchTeamMember(BaseModel):
         index=True,
     )
 
-    match_team: Mapped["MatchTeam"] = relationship(back_populates="members", lazy="selectin")
+    tournament_team: Mapped["TournamentTeam"] = relationship(back_populates="members", lazy="selectin")
     user: Mapped["User"] = relationship(lazy="selectin")  # noqa: F821
 
     # ------------------------------------------------------------------
@@ -137,4 +137,4 @@ class MatchTeamMember(BaseModel):
     )
 
     def __repr__(self) -> str:
-        return f"<MatchTeamMember match_team_id={self.match_team_id} user_id={self.user_id}>"
+        return f"<TournamentTeamMember tournament_team_id={self.tournament_team_id} user_id={self.user_id}>"

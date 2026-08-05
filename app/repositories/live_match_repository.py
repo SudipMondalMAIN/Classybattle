@@ -1,5 +1,5 @@
 """
-Repositories for the Live Match & Real-Time Tournament System (Phase 12).
+Repositories for the Live Tournament & Real-Time Tournament System (Phase 12).
 """
 from typing import Optional, Sequence
 from uuid import UUID
@@ -28,10 +28,10 @@ class LiveMatchRepository(BaseRepository[LiveMatch]):
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(session, LiveMatch)
 
-    async def get_by_match_id(
-        self, match_id: UUID, *, with_lock: bool = False
+    async def get_by_tournament_id(
+        self, tournament_id: UUID, *, with_lock: bool = False
     ) -> Optional[LiveMatch]:
-        stmt = select(LiveMatch).where(LiveMatch.match_id == match_id)
+        stmt = select(LiveMatch).where(LiveMatch.tournament_id == tournament_id)
         if with_lock:
             stmt = stmt.with_for_update()
         result = await self.session.execute(stmt)
@@ -72,26 +72,26 @@ class LiveMatchEventRepository(BaseRepository[LiveMatchEvent]):
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(session, LiveMatchEvent)
 
-    async def next_sequence(self, match_id: UUID) -> int:
+    async def next_sequence(self, tournament_id: UUID) -> int:
         stmt = select(func.max(LiveMatchEvent.sequence)).where(
-            LiveMatchEvent.match_id == match_id
+            LiveMatchEvent.tournament_id == tournament_id
         )
         current_max = (await self.session.execute(stmt)).scalar_one()
         return (current_max or 0) + 1
 
     async def get_by_client_event_id(
-        self, match_id: UUID, client_event_id: str
+        self, tournament_id: UUID, client_event_id: str
     ) -> Optional[LiveMatchEvent]:
         stmt = select(LiveMatchEvent).where(
-            LiveMatchEvent.match_id == match_id,
+            LiveMatchEvent.tournament_id == tournament_id,
             LiveMatchEvent.client_event_id == client_event_id,
         )
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def list_for_match(
+    async def list_for_tournament(
         self,
-        match_id: UUID,
+        tournament_id: UUID,
         *,
         page: int = 1,
         page_size: int = 20,
@@ -100,7 +100,7 @@ class LiveMatchEventRepository(BaseRepository[LiveMatchEvent]):
         sort_by: str = "sequence",
         sort_order: str = "desc",
     ) -> tuple[Sequence[LiveMatchEvent], int]:
-        conditions = [LiveMatchEvent.match_id == match_id]
+        conditions = [LiveMatchEvent.tournament_id == tournament_id]
         if event_type is not None:
             conditions.append(LiveMatchEvent.event_type == event_type)
         if round_number is not None:
@@ -127,27 +127,27 @@ class LiveMatchScoreRepository(BaseRepository[LiveMatchScore]):
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(session, LiveMatchScore)
 
-    async def get_by_team(self, match_id: UUID, team_id: UUID) -> Optional[LiveMatchScore]:
+    async def get_by_team(self, tournament_id: UUID, team_id: UUID) -> Optional[LiveMatchScore]:
         stmt = select(LiveMatchScore).where(
-            LiveMatchScore.match_id == match_id, LiveMatchScore.team_id == team_id
+            LiveMatchScore.tournament_id == tournament_id, LiveMatchScore.team_id == team_id
         )
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
     async def get_by_participant(
-        self, match_id: UUID, participant_id: UUID
+        self, tournament_id: UUID, participant_id: UUID
     ) -> Optional[LiveMatchScore]:
         stmt = select(LiveMatchScore).where(
-            LiveMatchScore.match_id == match_id,
+            LiveMatchScore.tournament_id == tournament_id,
             LiveMatchScore.participant_id == participant_id,
         )
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
     async def leaderboard(
-        self, match_id: UUID, *, page: int = 1, page_size: int = 50
+        self, tournament_id: UUID, *, page: int = 1, page_size: int = 50
     ) -> tuple[Sequence[LiveMatchScore], int]:
-        conditions = [LiveMatchScore.match_id == match_id]
+        conditions = [LiveMatchScore.tournament_id == tournament_id]
         count_stmt = select(func.count(LiveMatchScore.id)).where(*conditions)
         total = (await self.session.execute(count_stmt)).scalar_one()
 
@@ -161,10 +161,10 @@ class LiveMatchScoreRepository(BaseRepository[LiveMatchScore]):
         result = await self.session.execute(stmt)
         return result.scalars().all(), total
 
-    async def list_all_for_match(self, match_id: UUID) -> Sequence[LiveMatchScore]:
+    async def list_all_for_tournament(self, tournament_id: UUID) -> Sequence[LiveMatchScore]:
         stmt = (
             select(LiveMatchScore)
-            .where(LiveMatchScore.match_id == match_id)
+            .where(LiveMatchScore.tournament_id == tournament_id)
             .order_by(desc(LiveMatchScore.score), desc(LiveMatchScore.kills))
         )
         result = await self.session.execute(stmt)

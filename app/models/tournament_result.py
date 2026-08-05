@@ -1,7 +1,7 @@
 """
-MatchResult model — Match Result & Winner Management System (Phase 11).
+TournamentResult model — Match Result & Winner Management System (Phase 11).
 
-One active result row per Match (unique constraint on match_id). Editing
+One active result row per Tournament (unique constraint on tournament_id). Editing
 resubmits/updates this same row; a rejected result can be resubmitted by
 transitioning back to SUBMITTED. Full history of every state change is
 captured via the existing AuditService (entity="match_result"), rather
@@ -30,7 +30,7 @@ from app.database.base import BaseModel
 from app.database.types import PortableJSONB, str_enum
 
 
-class MatchResultStatus(str, enum.Enum):
+class TournamentResultStatus(str, enum.Enum):
     SUBMITTED = "submitted"
     VERIFIED = "verified"
     APPROVED = "approved"
@@ -39,28 +39,21 @@ class MatchResultStatus(str, enum.Enum):
 
 # Explicit allowed forward transitions, mirroring the pattern used for
 # MATCH_STATUS_TRANSITIONS / PRIZE_POOL_STATUS_TRANSITIONS.
-MATCH_RESULT_STATUS_TRANSITIONS: dict[MatchResultStatus, set[MatchResultStatus]] = {
-    MatchResultStatus.SUBMITTED: {MatchResultStatus.VERIFIED, MatchResultStatus.REJECTED},
-    MatchResultStatus.VERIFIED: {MatchResultStatus.APPROVED, MatchResultStatus.REJECTED},
-    MatchResultStatus.APPROVED: set(),
-    MatchResultStatus.REJECTED: {MatchResultStatus.SUBMITTED},
+TOURNAMENT_RESULT_STATUS_TRANSITIONS: dict[TournamentResultStatus, set[TournamentResultStatus]] = {
+    TournamentResultStatus.SUBMITTED: {TournamentResultStatus.VERIFIED, TournamentResultStatus.REJECTED},
+    TournamentResultStatus.VERIFIED: {TournamentResultStatus.APPROVED, TournamentResultStatus.REJECTED},
+    TournamentResultStatus.APPROVED: set(),
+    TournamentResultStatus.REJECTED: {TournamentResultStatus.SUBMITTED},
 }
 
 
-class MatchResult(BaseModel):
-    __tablename__ = "match_results"
+class TournamentResult(BaseModel):
+    __tablename__ = "tournament_results"
     __table_args__ = (
-        UniqueConstraint("match_id", name="uq_match_results_match_id"),
-        Index("ix_match_results_tournament_status", "tournament_id", "status"),
+        UniqueConstraint("tournament_id", name="uq_tournament_results_tournament_id"),
+        Index("ix_tournament_results_tournament_status", "tournament_id", "status"),
     )
 
-    match_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("matches.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    # Denormalized for tournament-wide filtering/pagination without a join.
     tournament_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("tournaments.id", ondelete="CASCADE"),
@@ -74,9 +67,9 @@ class MatchResult(BaseModel):
     result_data: Mapped[list] = mapped_column(PortableJSONB, nullable=False)
     is_tie: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
-    status: Mapped[MatchResultStatus] = mapped_column(
-        str_enum(MatchResultStatus, "match_result_status"),
-        default=MatchResultStatus.SUBMITTED,
+    status: Mapped[TournamentResultStatus] = mapped_column(
+        str_enum(TournamentResultStatus, "tournament_result_status"),
+        default=TournamentResultStatus.SUBMITTED,
         nullable=False,
         index=True,
     )
@@ -113,16 +106,15 @@ class MatchResult(BaseModel):
 
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
-    match: Mapped["Match"] = relationship(lazy="selectin")  # noqa: F821
     tournament: Mapped["Tournament"] = relationship(lazy="selectin")  # noqa: F821
-    winners: Mapped[list["MatchWinner"]] = relationship(  # noqa: F821
-        back_populates="match_result",
+    winners: Mapped[list["TournamentWinner"]] = relationship(  # noqa: F821
+        back_populates="tournament_result",
         cascade="all, delete-orphan",
         lazy="selectin",
-        order_by="MatchWinner.rank.asc()",
+        order_by="TournamentWinner.rank.asc()",
     )
 
     def __repr__(self) -> str:
         return (
-            f"<MatchResult id={self.id} match_id={self.match_id} status={self.status}>"
+            f"<TournamentResult id={self.id} tournament_id={self.tournament_id} status={self.status}>"
         )

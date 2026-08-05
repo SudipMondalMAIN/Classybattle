@@ -1,7 +1,7 @@
 """
-MatchParticipant model — Match Team Assignment & Check-in System (Phase 7).
+TournamentParticipant model — Tournament Team Assignment & Check-in System (Phase 7).
 
-Represents a single slot within a Match: either a registered ``Team``
+Represents a single slot within a Tournament: either a registered ``Team``
 (Duo/Trio/Squad/tournament formats) or an individual ``Participant``
 (Solo formats). One model backs team assignment (§2), check-in (§6) and
 no-show handling (§7) so the three features share one consistent slot
@@ -32,14 +32,14 @@ from app.database.base import BaseModel
 from app.database.types import str_enum
 
 
-class MatchAssignmentType(str, enum.Enum):
+class TournamentAssignmentType(str, enum.Enum):
     REGISTERED = "registered"
     RANDOM = "random"
     MANUAL = "manual"
     AUTO = "auto"
 
 
-class MatchCheckInStatus(str, enum.Enum):
+class TournamentCheckInStatus(str, enum.Enum):
     NOT_OPEN = "not_open"
     PENDING = "pending"
     CHECKED_IN = "checked_in"
@@ -48,43 +48,43 @@ class MatchCheckInStatus(str, enum.Enum):
 
 
 # Explicit allowed forward transitions for a slot's check-in status.
-MATCH_CHECKIN_TRANSITIONS: dict[MatchCheckInStatus, set[MatchCheckInStatus]] = {
-    MatchCheckInStatus.NOT_OPEN: {MatchCheckInStatus.PENDING},
-    MatchCheckInStatus.PENDING: {
-        MatchCheckInStatus.CHECKED_IN,
-        MatchCheckInStatus.LATE_CHECKED_IN,
-        MatchCheckInStatus.NO_SHOW,
+TOURNAMENT_CHECKIN_TRANSITIONS: dict[TournamentCheckInStatus, set[TournamentCheckInStatus]] = {
+    TournamentCheckInStatus.NOT_OPEN: {TournamentCheckInStatus.PENDING},
+    TournamentCheckInStatus.PENDING: {
+        TournamentCheckInStatus.CHECKED_IN,
+        TournamentCheckInStatus.LATE_CHECKED_IN,
+        TournamentCheckInStatus.NO_SHOW,
     },
-    MatchCheckInStatus.CHECKED_IN: set(),
-    MatchCheckInStatus.LATE_CHECKED_IN: set(),
-    MatchCheckInStatus.NO_SHOW: {
-        MatchCheckInStatus.CHECKED_IN,
-        MatchCheckInStatus.LATE_CHECKED_IN,
+    TournamentCheckInStatus.CHECKED_IN: set(),
+    TournamentCheckInStatus.LATE_CHECKED_IN: set(),
+    TournamentCheckInStatus.NO_SHOW: {
+        TournamentCheckInStatus.CHECKED_IN,
+        TournamentCheckInStatus.LATE_CHECKED_IN,
     },
 }
 
 
-class MatchParticipant(BaseModel):
-    __tablename__ = "match_participants"
+class TournamentParticipant(BaseModel):
+    __tablename__ = "tournament_participants"
     __table_args__ = (
-        UniqueConstraint("match_id", "slot_number", name="uq_match_participants_match_slot"),
+        UniqueConstraint("tournament_id", "slot_number", name="uq_tournament_participants_match_slot"),
         UniqueConstraint(
-            "match_id", "team_id", name="uq_match_participants_match_team"
+            "tournament_id", "team_id", name="uq_tournament_participants_match_team"
         ),
         UniqueConstraint(
-            "match_id", "participant_id", name="uq_match_participants_match_participant"
+            "tournament_id", "participant_id", name="uq_tournament_participants_match_participant"
         ),
-        CheckConstraint("slot_number > 0", name="ck_match_participants_slot_positive"),
+        CheckConstraint("slot_number > 0", name="ck_tournament_participants_slot_positive"),
         CheckConstraint(
-            "(team_id IS NOT NULL) OR (participant_id IS NOT NULL) OR (match_team_id IS NOT NULL)",
-            name="ck_match_participants_team_or_participant",
+            "(team_id IS NOT NULL) OR (participant_id IS NOT NULL) OR (tournament_team_id IS NOT NULL)",
+            name="ck_tournament_participants_team_or_participant",
         ),
-        Index("ix_match_participants_match_checkin", "match_id", "check_in_status"),
+        Index("ix_tournament_participants_match_checkin", "tournament_id", "check_in_status"),
     )
 
-    match_id: Mapped[uuid.UUID] = mapped_column(
+    tournament_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("matches.id", ondelete="CASCADE"),
+        ForeignKey("tournaments.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
@@ -98,11 +98,11 @@ class MatchParticipant(BaseModel):
         index=True,
     )
     # For recurring-schedule slots (Free Fire Clash Squad etc.) — points at
-    # a per-slot MatchTeam instead of a per-tournament Team (see
-    # app/models/match_team.py for why these are separate).
-    match_team_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+    # a per-slot TournamentTeam instead of a per-tournament Team (see
+    # app/models/tournament_team.py for why these are separate).
+    tournament_team_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("match_teams.id", ondelete="CASCADE"),
+        ForeignKey("tournament_teams.id", ondelete="CASCADE"),
         nullable=True,
         index=True,
     )
@@ -115,9 +115,9 @@ class MatchParticipant(BaseModel):
 
     slot_number: Mapped[int] = mapped_column(Integer, nullable=False)
 
-    assignment_type: Mapped[MatchAssignmentType] = mapped_column(
-        str_enum(MatchAssignmentType, "match_assignment_type"),
-        default=MatchAssignmentType.REGISTERED,
+    assignment_type: Mapped[TournamentAssignmentType] = mapped_column(
+        str_enum(TournamentAssignmentType, "tournament_assignment_type"),
+        default=TournamentAssignmentType.REGISTERED,
         nullable=False,
     )
     assigned_by: Mapped[Optional[uuid.UUID]] = mapped_column(
@@ -129,9 +129,9 @@ class MatchParticipant(BaseModel):
     # ------------------------------------------------------------------
     # Check-in (§6) / no-show (§7) tracking.
     # ------------------------------------------------------------------
-    check_in_status: Mapped[MatchCheckInStatus] = mapped_column(
-        str_enum(MatchCheckInStatus, "match_check_in_status"),
-        default=MatchCheckInStatus.NOT_OPEN,
+    check_in_status: Mapped[TournamentCheckInStatus] = mapped_column(
+        str_enum(TournamentCheckInStatus, "tournament_check_in_status"),
+        default=TournamentCheckInStatus.NOT_OPEN,
         nullable=False,
         index=True,
     )
@@ -167,12 +167,12 @@ class MatchParticipant(BaseModel):
         DateTime(timezone=True), nullable=True
     )
 
-    match: Mapped["Match"] = relationship(back_populates="slots", lazy="selectin")  # noqa: F821
+    tournament: Mapped["Tournament"] = relationship(back_populates="slots", lazy="selectin")  # noqa: F821
     team: Mapped[Optional["Team"]] = relationship(  # noqa: F821
         foreign_keys=[team_id], lazy="selectin"
     )
-    match_team: Mapped[Optional["MatchTeam"]] = relationship(  # noqa: F821
-        foreign_keys=[match_team_id], lazy="selectin"
+    tournament_team: Mapped[Optional["TournamentTeam"]] = relationship(  # noqa: F821
+        foreign_keys=[tournament_team_id], lazy="selectin"
     )
     participant: Mapped[Optional["Participant"]] = relationship(  # noqa: F821
         foreign_keys=[participant_id], lazy="selectin"
@@ -180,7 +180,7 @@ class MatchParticipant(BaseModel):
 
     def __repr__(self) -> str:
         return (
-            f"<MatchParticipant id={self.id} match_id={self.match_id} "
+            f"<TournamentParticipant id={self.id} tournament_id={self.tournament_id} "
             f"team_id={self.team_id} participant_id={self.participant_id} "
             f"check_in={self.check_in_status}>"
         )

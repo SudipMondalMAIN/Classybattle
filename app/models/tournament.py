@@ -1,5 +1,10 @@
 """
-Tournament model — core entity for the Tournament module (Phase 2).
+Tournament model — core entity for the Tournament module.
+
+Match-refactor: Tournament is now the joinable/playable unit itself
+(the Match layer has been removed). Room publish info
+(room_id/room_password/published_at/auto_complete_at), formerly on
+Match/LiveMatch, now lives directly on Tournament.
 """
 import enum
 import uuid
@@ -11,7 +16,6 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     DateTime,
-    Enum,
     ForeignKey,
     Index,
     Integer,
@@ -28,14 +32,10 @@ from app.database.types import PortableJSONB, str_enum
 
 
 class TournamentStatus(str, enum.Enum):
-    DRAFT = "draft"
-    PUBLISHED = "published"
-    REGISTRATION_OPEN = "registration_open"
-    REGISTRATION_CLOSED = "registration_closed"
-    LIVE = "live"
-    COMPLETED = "completed"
-    ARCHIVED = "archived"
-    CANCELLED = "cancelled"
+    SCHEDULED = "scheduled"    # user can join anytime while in this state
+    LIVE = "live"              # auto-set the moment admin publishes room_id/room_password
+    COMPLETED = "completed"    # auto-set 40 minutes after room publish (published_at + 40min)
+    CANCELLED = "cancelled"    # admin can cancel from any state, any time
 
 
 class TournamentVisibility(str, enum.Enum):
@@ -53,12 +53,12 @@ class TeamRegistrationMode(str, enum.Enum):
 
 
 class ScheduleCategory(str, enum.Enum):
-    """Simplified per-game category for auto-generated daily match
-    schedules (Raj's simplified flow): every Game has at most two
-    schedules — SOLO (classic/battle-royale, join alone) and SQUAD
-    (Clash-Squad style, join as a fixed-size team). No map/mode picking
-    needed; Admin only configures matches-per-day, per-match time,
-    entry fee and prize pool for each.
+    """Simplified per-game category for auto-generated daily tournament
+    schedules: every Game has at most two schedules — SOLO
+    (classic/battle-royale, join alone) and SQUAD (Clash-Squad style,
+    join as a fixed-size team). No map/mode picking needed; Admin only
+    configures tournaments-per-day, per-tournament time, entry fee and
+    prize pool for each.
     """
 
     SOLO = "solo"
@@ -84,24 +84,10 @@ class TeamFormat(str, enum.Enum):
 # Explicit allowed forward transitions. Kept as data (not scattered `if`
 # chains) so the service layer and any future admin UI can introspect it.
 TOURNAMENT_STATUS_TRANSITIONS: dict[TournamentStatus, set[TournamentStatus]] = {
-    TournamentStatus.DRAFT: {TournamentStatus.PUBLISHED, TournamentStatus.CANCELLED},
-    TournamentStatus.PUBLISHED: {
-        TournamentStatus.REGISTRATION_OPEN,
-        TournamentStatus.CANCELLED,
-    },
-    TournamentStatus.REGISTRATION_OPEN: {
-        TournamentStatus.REGISTRATION_CLOSED,
-        TournamentStatus.CANCELLED,
-    },
-    TournamentStatus.REGISTRATION_CLOSED: {
-        TournamentStatus.LIVE,
-        TournamentStatus.REGISTRATION_OPEN,
-        TournamentStatus.CANCELLED,
-    },
+    TournamentStatus.SCHEDULED: {TournamentStatus.LIVE, TournamentStatus.CANCELLED},
     TournamentStatus.LIVE: {TournamentStatus.COMPLETED, TournamentStatus.CANCELLED},
-    TournamentStatus.COMPLETED: {TournamentStatus.ARCHIVED},
-    TournamentStatus.ARCHIVED: set(),
-    TournamentStatus.CANCELLED: {TournamentStatus.ARCHIVED},
+    TournamentStatus.COMPLETED: set(),
+    TournamentStatus.CANCELLED: set(),
 }
 
 
@@ -116,14 +102,6 @@ class Tournament(ShortIdMixin, BaseModel):
             name="ck_tournaments_current_players_within_bounds",
         ),
         CheckConstraint(
-            "registration_end > registration_start",
-            name="ck_tournaments_registration_window_valid",
-        ),
-        CheckConstraint(
-            "tournament_end > tournament_start",
-            name="ck_tournaments_play_window_valid",
-        ),
-        CheckConstraint(
             "team_size > 0", name="ck_tournaments_team_size_positive"
         ),
         CheckConstraint(
@@ -132,6 +110,7 @@ class Tournament(ShortIdMixin, BaseModel):
         ),
         Index("ix_tournaments_status_visibility", "status", "visibility"),
         Index("ix_tournaments_game_status", "game_id", "status"),
+        Index("ix_tournaments_status_auto_complete", "status", "auto_complete_at"),
     )
 
     tournament_uid: Mapped[str] = mapped_column(
@@ -150,10 +129,6 @@ class Tournament(ShortIdMixin, BaseModel):
         index=True,
     )
 
-    # Phase 7.5: promoted from free-form String(50) identifiers to proper
-    # FK-backed references now that GameMode/Map lookup tables exist
-    # (Phases 3-4). ON DELETE SET NULL keeps a tournament intact even if
-    # its mode/map is later retired.
     mode_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("game_modes.id", ondelete="SET NULL"),
@@ -178,14 +153,9 @@ class Tournament(ShortIdMixin, BaseModel):
     max_players: Mapped[int] = mapped_column(Integer, nullable=False)
     current_players: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
-    registration_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    registration_end: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    tournament_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    tournament_end: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-
     status: Mapped[TournamentStatus] = mapped_column(
         str_enum(TournamentStatus, "tournament_status"),
-        default=TournamentStatus.DRAFT,
+        default=TournamentStatus.SCHEDULED,
         nullable=False,
         index=True,
     )
@@ -195,6 +165,19 @@ class Tournament(ShortIdMixin, BaseModel):
         nullable=False,
     )
     is_featured: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    # ------------------------------------------------------------------
+    # Room / live info — merged in from Match/LiveMatch. Publishing the
+    # room (room_id + room_password) auto-flips status -> LIVE and stamps
+    # published_at / auto_complete_at (published_at + 40 minutes). A
+    # background scheduler tick flips status -> COMPLETED once
+    # auto_complete_at has passed (queried directly off this indexed
+    # pair, no per-row recomputation needed).
+    # ------------------------------------------------------------------
+    room_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    room_password: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    published_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    auto_complete_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # ------------------------------------------------------------------
     # Team registration settings (Phase 6).
@@ -210,12 +193,12 @@ class Tournament(ShortIdMixin, BaseModel):
     # ------------------------------------------------------------------
     # Recurring daily schedule config. When is_recurring_schedule is
     # True, this row is not a single bracket event but a template that
-    # SlotGeneratorService uses to stamp out one `Match` (= one join-able
-    # slot, e.g. "Free Fire Classic 10:30 AM") every
+    # SlotGeneratorService uses to stamp out one `Tournament` (= one
+    # join-able slot, e.g. "Free Fire Classic 10:30 AM") every
     # `slot_interval_minutes` between daily_start_time and
-    # daily_end_time, for every day. Bracket-only fields above
-    # (registration_start/end, max_players bracket sizing) are ignored
-    # for recurring schedules — join is instant, no registration window.
+    # daily_end_time, for every day. Join is instant while
+    # status == SCHEDULED and slots are available — no registration
+    # window.
     # ------------------------------------------------------------------
     is_recurring_schedule: Mapped[bool] = mapped_column(
         Boolean, default=False, nullable=False, index=True
@@ -240,22 +223,22 @@ class Tournament(ShortIdMixin, BaseModel):
     # ------------------------------------------------------------------
     # Simplified schedule config (Raj's flow). A schedule is always
     # exactly one of SOLO or SQUAD per Game — no map/mode picking.
-    # `daily_slot_times` is the source of truth for how many matches get
-    # generated per day and at what time: Admin can add/remove/edit
-    # entries freely (not locked to 27 — could be 28, 29, etc.), and can
-    # edit an individual generated Match's time/fee/prize afterwards too
-    # (Match.entry_fee / Match.prize_pool override the schedule default).
+    # `daily_slot_times` is the source of truth for how many tournaments
+    # get generated per day and at what time: Admin can add/remove/edit
+    # entries freely, and can edit an individual generated Tournament's
+    # time/fee/prize afterwards too (entry_fee / prize_pool override the
+    # schedule default).
     # ------------------------------------------------------------------
     category: Mapped[Optional[ScheduleCategory]] = mapped_column(
         str_enum(ScheduleCategory, "schedule_category"), nullable=True, index=True
     )
     squad_size: Mapped[int] = mapped_column(
         Integer, default=4, nullable=False,
-        comment="Players per squad when category=SQUAD (e.g. 4 for a 4v4 Clash Squad match). Ignored for SOLO.",
+        comment="Players per squad when category=SQUAD (e.g. 4 for a 4v4 Clash Squad tournament). Ignored for SOLO.",
     )
     daily_slot_times: Mapped[Optional[list[str]]] = mapped_column(
         PortableJSONB, nullable=True,
-        comment="List of 'HH:MM' (24h, UTC) strings, one per match generated each day. len() = matches/day.",
+        comment="List of 'HH:MM' (24h, UTC) strings, one per tournament generated each day. len() = tournaments/day.",
     )
 
     created_by: Mapped[uuid.UUID] = mapped_column(
@@ -269,6 +252,9 @@ class Tournament(ShortIdMixin, BaseModel):
     mode: Mapped[Optional["GameMode"]] = relationship(lazy="selectin")  # noqa: F821
     map: Mapped[Optional["Map"]] = relationship(lazy="selectin")  # noqa: F821
     creator: Mapped[Optional["User"]] = relationship(lazy="selectin")  # noqa: F821
+    slots: Mapped[list["TournamentParticipant"]] = relationship(  # noqa: F821
+        back_populates="tournament", cascade="all, delete-orphan", lazy="selectin"
+    )
 
     def __repr__(self) -> str:
         return f"<Tournament id={self.id} slug={self.slug} status={self.status}>"

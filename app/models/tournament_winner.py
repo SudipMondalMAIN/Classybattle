@@ -1,7 +1,7 @@
 """
-MatchWinner model — Match Result & Winner Management System (Phase 11).
+TournamentWinner model — Match Result & Winner Management System (Phase 11).
 
-One row per (match, rank). Mirrors the "either a Team or a Participant"
+One row per (tournament, rank). Mirrors the "either a Team or a Participant"
 slot pattern used by MatchParticipant so the same model backs both Solo
 and Team match formats, single-winner and multi-winner/tie scenarios
 (ties share the same rank across multiple rows).
@@ -33,38 +33,35 @@ class WinnerAssignmentSource(str, enum.Enum):
     MANUAL = "manual"
 
 
-class MatchWinner(BaseModel):
-    __tablename__ = "match_winners"
+class TournamentWinner(BaseModel):
+    __tablename__ = "tournament_winners"
     __table_args__ = (
-        UniqueConstraint("match_id", "rank", "team_id", name="uq_match_winners_match_rank_team"),
+        UniqueConstraint("tournament_id", "rank", "team_id", name="uq_tournament_winners_tournament_rank_team"),
         UniqueConstraint(
-            "match_id", "rank", "participant_id", name="uq_match_winners_match_rank_participant"
+            "tournament_id", "rank", "participant_id", name="uq_tournament_winners_tournament_rank_participant"
         ),
         UniqueConstraint(
-            "match_id", "team_id", name="uq_match_winners_match_team"
+            "tournament_id", "team_id", name="uq_tournament_winners_tournament_team"
         ),
         UniqueConstraint(
-            "match_id", "participant_id", name="uq_match_winners_match_participant"
+            "tournament_id", "participant_id", name="uq_tournament_winners_tournament_participant"
         ),
-        CheckConstraint("rank > 0", name="ck_match_winners_rank_positive"),
+        CheckConstraint("rank > 0", name="ck_tournament_winners_rank_positive"),
         CheckConstraint(
             "(team_id IS NOT NULL) OR (participant_id IS NOT NULL)",
-            name="ck_match_winners_team_or_participant",
+            name="ck_tournament_winners_team_or_participant",
         ),
-        Index("ix_match_winners_match_rank", "match_id", "rank"),
+        Index("ix_tournament_winners_tournament_rank", "tournament_id", "rank"),
     )
 
-    match_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("matches.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    match_result_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("match_results.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
     tournament_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("tournaments.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    tournament_result_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tournament_results.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
 
     team_id: Mapped[Optional[uuid.UUID]] = mapped_column(
@@ -92,8 +89,8 @@ class MatchWinner(BaseModel):
     )
     declared_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    match: Mapped["Match"] = relationship(lazy="selectin")  # noqa: F821
-    match_result: Mapped["MatchResult"] = relationship(  # noqa: F821
+    tournament: Mapped["Tournament"] = relationship(lazy="selectin")  # noqa: F821
+    tournament_result: Mapped["TournamentResult"] = relationship(  # noqa: F821
         back_populates="winners", lazy="selectin"
     )
     team: Mapped[Optional["Team"]] = relationship(foreign_keys=[team_id], lazy="selectin")  # noqa: F821
@@ -103,6 +100,6 @@ class MatchWinner(BaseModel):
 
     def __repr__(self) -> str:
         return (
-            f"<MatchWinner id={self.id} match_id={self.match_id} rank={self.rank} "
+            f"<TournamentWinner id={self.id} tournament_id={self.tournament_id} rank={self.rank} "
             f"team_id={self.team_id} participant_id={self.participant_id}>"
         )

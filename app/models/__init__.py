@@ -40,20 +40,19 @@ from app.models.game import Game
 from app.models.game_mode import GameMode
 from app.models.game_profile import UserGameProfile
 from app.models.map import Map
-from app.models.match import MATCH_STATUS_TRANSITIONS, Match, MatchStatus, RoomStatus
-from app.models.match_participant import (
-    MATCH_CHECKIN_TRANSITIONS,
-    MatchAssignmentType,
-    MatchCheckInStatus,
-    MatchParticipant,
+from app.models.tournament_participant import (
+    TOURNAMENT_CHECKIN_TRANSITIONS,
+    TournamentAssignmentType,
+    TournamentCheckInStatus,
+    TournamentParticipant,
 )
-from app.models.match_result import (
-    MATCH_RESULT_STATUS_TRANSITIONS,
-    MatchResult,
-    MatchResultStatus,
+from app.models.tournament_result import (
+    TOURNAMENT_RESULT_STATUS_TRANSITIONS,
+    TournamentResult,
+    TournamentResultStatus,
 )
-from app.models.match_team import MatchTeam, MatchTeamMember, MatchTeamStatus
-from app.models.match_winner import MatchWinner, WinnerAssignmentSource
+from app.models.tournament_team import TournamentTeam, TournamentTeamMember, TournamentTeamStatus
+from app.models.tournament_winner import TournamentWinner, WinnerAssignmentSource
 from app.models.live_match import (
     LIVE_MATCH_STATUS_TRANSITIONS,
     LiveMatch,
@@ -131,6 +130,8 @@ from app.models.team_community import (
     TeamJoinRequestStatus,
 )
 from app.models.tournament import (
+    TOURNAMENT_STATUS_TRANSITIONS,
+    ScheduleCategory,
     TeamFormat,
     TeamRegistrationMode,
     Tournament,
@@ -172,17 +173,15 @@ __all__ = [
     "TeamMember",
     "TeamMemberRole",
     "TeamRegistrationMode",
-    "Match",
-    "MatchStatus",
-    "RoomStatus",
-    "MATCH_STATUS_TRANSITIONS",
-    "MatchParticipant",
-    "MatchAssignmentType",
-    "MatchCheckInStatus",
-    "MATCH_CHECKIN_TRANSITIONS",
-    "MatchTeam",
-    "MatchTeamMember",
-    "MatchTeamStatus",
+    "TOURNAMENT_STATUS_TRANSITIONS",
+    "ScheduleCategory",
+    "TournamentParticipant",
+    "TournamentAssignmentType",
+    "TournamentCheckInStatus",
+    "TOURNAMENT_CHECKIN_TRANSITIONS",
+    "TournamentTeam",
+    "TournamentTeamMember",
+    "TournamentTeamStatus",
     "TeamFormat",
     "AuditLog",
     "AuditAction",
@@ -199,10 +198,10 @@ __all__ = [
     "PRIZE_POOL_STATUS_TRANSITIONS",
     "PrizePayout",
     "PrizePayoutStatus",
-    "MatchResult",
-    "MatchResultStatus",
-    "MATCH_RESULT_STATUS_TRANSITIONS",
-    "MatchWinner",
+    "TournamentResult",
+    "TournamentResultStatus",
+    "TOURNAMENT_RESULT_STATUS_TRANSITIONS",
+    "TournamentWinner",
     "WinnerAssignmentSource",
     "LiveMatch",
     "LiveMatchStatus",
