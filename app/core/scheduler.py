@@ -67,8 +67,8 @@ async def _generate_upcoming_slots() -> None:
             schedules = await tournament_repo.list_active_recurring_schedules()
 
             for schedule in schedules:
-                todays_matches = await generator.match_repo.list_for_tournament_between(
-                    schedule.id, today_start_utc, today_end_utc
+                todays_matches = await tournament_repo.list_generated_slots_for_template(
+                    schedule.slug, today.isoformat()
                 )
                 if not todays_matches:
                     created = await generator.generate_for_day(schedule, today)

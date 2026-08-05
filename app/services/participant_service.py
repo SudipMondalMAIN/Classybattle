@@ -30,9 +30,11 @@ from app.models.participant import (
     RegistrationType,
 )
 from app.models.tournament import Tournament, TournamentStatus
+from app.models.tournament_participant import TournamentAssignmentType, TournamentCheckInStatus
 from app.models.user import User, UserRole
 from app.repositories.participant_repository import ParticipantRepository
 from app.repositories.team_member_repository import TeamMemberRepository
+from app.repositories.tournament_participant_repository import TournamentParticipantRepository
 from app.repositories.tournament_repository import TournamentRepository
 from app.schemas.participant import ParticipantRegister
 from app.services.audit_service import AuditService
@@ -70,6 +72,7 @@ class ParticipantService:
         self.repo = ParticipantRepository(session)
         self.tournament_repo = TournamentRepository(session)
         self.team_member_repo = TeamMemberRepository(session)
+        self.slot_repo = TournamentParticipantRepository(session)
         self.wallet_service = WalletService(session)
         self.audit_service = AuditService(session)
 
@@ -260,6 +263,25 @@ class ParticipantService:
     # ------------------------------------------------------------------
     # Registration
     # ------------------------------------------------------------------
+    async def _ensure_slot(self, tournament: Tournament, participant: Participant) -> None:
+        """Make sure a TournamentParticipant "slot" row exists for this
+        registration -- idempotent, safe to call on every register() call
+        (including re-registration after a cancellation)."""
+        existing_slot = await self.slot_repo.get_by_match_and_participant(
+            tournament.id, participant.id
+        )
+        if existing_slot is not None:
+            return
+        slot_number = await self.slot_repo.next_slot_number(tournament.id)
+        await self.slot_repo.create(
+            tournament_id=tournament.id,
+            participant_id=participant.id,
+            slot_number=slot_number,
+            assignment_type=TournamentAssignmentType.REGISTERED,
+            check_in_status=TournamentCheckInStatus.NOT_OPEN,
+        )
+        await self.session.commit()
+
     async def register(
         self, tournament_id: UUID, payload: ParticipantRegister, current_user: User
     ) -> Participant:
@@ -343,6 +365,12 @@ class ParticipantService:
 
         await self.session.commit()
         await self.session.refresh(participant)
+
+        # A "slot" row is what the admin Players/Results panel, check-in and
+        # room-publish flow read from -- registering here without one meant
+        # players who joined via /register never showed up as joined even
+        # though their Participant row (and payment) existed correctly.
+        await self._ensure_slot(tournament, participant)
 
         try:
             from app.models.notification import NotificationEventType
