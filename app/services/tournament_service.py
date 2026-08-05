@@ -398,6 +398,19 @@ class TournamentService:
         )
         return tournament
 
+    async def can_view_room(
+        self, tournament: Tournament, current_user: Optional[User]
+    ) -> bool:
+        """Room credentials are only visible to registered participants or admins."""
+        if current_user is None:
+            return False
+        if self._is_admin(current_user):
+            return True
+        participant = await self.participant_repo.get_by_tournament_and_user(
+            tournament.id, current_user.id
+        )
+        return participant is not None
+
     async def get_room_info(self, tournament_id: UUID, current_user: User) -> Tournament:
         """Only participants (or admins) may view room credentials."""
         tournament = await self.get_by_id(tournament_id)

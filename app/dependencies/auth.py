@@ -38,6 +38,29 @@ async def get_current_user(
     return user
 
 
+async def get_current_user_optional(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    session: AsyncSession = Depends(get_db_session),
+) -> User | None:
+    """Same as get_current_user but returns None instead of raising when no/invalid
+    credentials are provided -- for endpoints that are publicly viewable but need
+    to know the caller's identity to decide what to include in the response."""
+    if credentials is None:
+        return None
+    try:
+        payload = decode_token(credentials.credentials, expected_type=TokenType.ACCESS)
+        user_id = payload.get("sub")
+        if user_id is None:
+            return None
+        user_repo = UserRepository(session)
+        user = await user_repo.get_by_id(UUID(user_id))
+        if user is None or not user.is_active:
+            return None
+        return user
+    except Exception:
+        return None
+
+
 async def get_current_active_verified_user(
     current_user: User = Depends(get_current_user),
 ) -> User:

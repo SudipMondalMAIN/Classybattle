@@ -10,7 +10,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import ValidationException
 from app.database.session import get_db_session
-from app.dependencies.auth import get_current_active_verified_user, require_admin
+from app.dependencies.auth import (
+    get_current_active_verified_user,
+    get_current_user_optional,
+    require_admin,
+)
 from app.models.tournament import TournamentStatus, TournamentVisibility
 from app.models.user import User
 from app.schemas.common import MessageResponse
@@ -36,6 +40,17 @@ _STATUS_ALIASES: dict[str, list[TournamentStatus]] = {
     "ongoing": [TournamentStatus.LIVE],
     "past": [TournamentStatus.COMPLETED, TournamentStatus.CANCELLED],
 }
+
+
+async def _to_tournament_read(service: TournamentService, tournament, current_user) -> TournamentRead:
+    """Serialize a Tournament, stripping room_id/room_password unless the
+    caller is a registered participant or admin (room credentials must
+    never leak through the public tournament-detail endpoints)."""
+    data = TournamentRead.model_validate(tournament)
+    if not await service.can_view_room(tournament, current_user):
+        data.room_id = None
+        data.room_password = None
+    return data
 
 
 def _resolve_status_filter(
@@ -103,11 +118,12 @@ async def list_tournaments(
 @router.get("/slug/{slug}", response_model=TournamentRead)
 async def get_tournament_by_slug(
     slug: str,
+    current_user: Optional[User] = Depends(get_current_user_optional),
     session: AsyncSession = Depends(get_db_session),
 ):
     service = TournamentService(session)
     tournament = await service.get_by_slug(slug)
-    return TournamentRead.model_validate(tournament)
+    return await _to_tournament_read(service, tournament, current_user)
 
 
 @router.get("/short/{short_id}", response_model=TournamentRead)
@@ -119,17 +135,18 @@ async def get_tournament_by_short_id(
     """Admin lookup by the human-friendly 8-digit short_id."""
     service = TournamentService(session)
     tournament = await service.get_by_short_id(short_id)
-    return TournamentRead.model_validate(tournament)
+    return await _to_tournament_read(service, tournament, current_user)
 
 
 @router.get("/{tournament_id}", response_model=TournamentRead)
 async def get_tournament(
     tournament_id: UUID,
+    current_user: Optional[User] = Depends(get_current_user_optional),
     session: AsyncSession = Depends(get_db_session),
 ):
     service = TournamentService(session)
     tournament = await service.get_by_id(tournament_id)
-    return TournamentRead.model_validate(tournament)
+    return await _to_tournament_read(service, tournament, current_user)
 
 
 @router.patch("/{tournament_id}", response_model=TournamentRead)

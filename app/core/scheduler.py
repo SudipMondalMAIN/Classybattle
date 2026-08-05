@@ -25,6 +25,7 @@ from app.core.logging import get_logger
 from app.database.session import AsyncSessionLocal
 from app.repositories.tournament_repository import TournamentRepository
 from app.services.slot_generator_service import IST, SlotGeneratorService
+from app.services.tournament_service import TournamentService
 
 logger = get_logger("slot_scheduler")
 
@@ -48,6 +49,16 @@ async def _generate_upcoming_slots() -> None:
         timezone.utc
     )
     today_end_utc = today_start_utc + timedelta(days=1)
+
+    async with AsyncSessionLocal() as session:
+        try:
+            tournament_service = TournamentService(session)
+            completed_count = await tournament_service.auto_complete_due_tournaments()
+            if completed_count:
+                logger.info("slot_auto_complete", tournaments=completed_count)
+        except Exception:  # noqa: BLE001 - never let the scheduler die
+            logger.exception("slot_auto_complete_failed")
+            await session.rollback()
 
     async with AsyncSessionLocal() as session:
         try:
