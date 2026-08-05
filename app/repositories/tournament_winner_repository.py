@@ -70,13 +70,10 @@ class TournamentWinnerRepository(BaseRepository[TournamentWinner]):
         page: int = 1,
         page_size: int = 20,
         tournament_id: Optional[UUID] = None,
-        tournament_id: Optional[UUID] = None,
         sort_by: str = "rank",
         sort_order: str = "asc",
     ) -> tuple[Sequence[TournamentWinner], int]:
         conditions = [TournamentWinner.deleted_at.is_(None)]
-        if tournament_id is not None:
-            conditions.append(TournamentWinner.tournament_id == tournament_id)
         if tournament_id is not None:
             conditions.append(TournamentWinner.tournament_id == tournament_id)
 

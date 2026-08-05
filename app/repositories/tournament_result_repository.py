@@ -45,14 +45,11 @@ class TournamentResultRepository(BaseRepository[TournamentResult]):
         page: int = 1,
         page_size: int = 20,
         tournament_id: Optional[UUID] = None,
-        tournament_id: Optional[UUID] = None,
         status: Optional[TournamentResultStatus] = None,
         sort_by: str = "created_at",
         sort_order: str = "desc",
     ) -> tuple[Sequence[TournamentResult], int]:
         conditions = [TournamentResult.deleted_at.is_(None)]
-        if tournament_id is not None:
-            conditions.append(TournamentResult.tournament_id == tournament_id)
         if tournament_id is not None:
             conditions.append(TournamentResult.tournament_id == tournament_id)
         if status is not None:

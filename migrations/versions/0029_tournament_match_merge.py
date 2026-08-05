@@ -197,12 +197,13 @@ def upgrade() -> None:
     # 4) tournament_participants (formerly match_participants)
     # ------------------------------------------------------------------
     tournament_assignment_type = postgresql.ENUM(
-        "registered", "random", "manual", "auto", name="tournament_assignment_type"
+        "registered", "random", "manual", "auto",
+        name="tournament_assignment_type", create_type=False,
     )
     tournament_assignment_type.create(bind, checkfirst=True)
     tournament_check_in_status = postgresql.ENUM(
         "not_open", "pending", "checked_in", "late_checked_in", "no_show",
-        name="tournament_check_in_status",
+        name="tournament_check_in_status", create_type=False,
     )
     tournament_check_in_status.create(bind, checkfirst=True)
 
@@ -282,7 +283,8 @@ def upgrade() -> None:
     # 5) tournament_results (formerly match_results)
     # ------------------------------------------------------------------
     tournament_result_status = postgresql.ENUM(
-        "submitted", "verified", "approved", "rejected", name="tournament_result_status"
+        "submitted", "verified", "approved", "rejected",
+        name="tournament_result_status", create_type=False,
     )
     tournament_result_status.create(bind, checkfirst=True)
 
