@@ -28,7 +28,7 @@ from app.database.types import PortableJSONB, str_enum
 class ReportTargetType(str, enum.Enum):
     PLAYER = "player"
     TEAM = "team"
-    MATCH = "match"
+    TOURNAMENT = "tournament"
 
 
 class ReportReason(str, enum.Enum):
@@ -80,9 +80,9 @@ class Report(ShortIdMixin, BaseModel):
         str_enum(ReportTargetType, "report_target_type"), nullable=False
     )
     # Polymorphic reference — user_id for PLAYER, team_id for TEAM,
-    # match_id for MATCH. Kept as a bare UUID (no FK) since it points at
-    # different tables depending on `target_type`, same approach as
-    # AuditLog.entity_id.
+    # tournament_id for TOURNAMENT. Kept as a bare UUID (no FK) since it
+    # points at different tables depending on `target_type`, same approach
+    # as AuditLog.entity_id.
     target_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False, index=True)
 
     reason: Mapped[ReportReason] = mapped_column(

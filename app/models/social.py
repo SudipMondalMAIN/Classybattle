@@ -43,8 +43,7 @@ class ActivityType(str, enum.Enum):
     FRIEND_ADDED = "friend_added"
     TOURNAMENT_JOINED = "tournament_joined"
     TOURNAMENT_WON = "tournament_won"
-    MATCH_PLAYED = "match_played"
-    MATCH_WON = "match_won"
+    TOURNAMENT_PLAYED = "tournament_played"
     WALLET_CREDITED = "wallet_credited"
     PRIZE_WON = "prize_won"
 
@@ -161,8 +160,8 @@ class ActivityFeedEntry(BaseModel):
     )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     meta_data: Mapped[Optional[dict]] = mapped_column(PortableJSONB, nullable=True)
-    # Idempotency key, e.g. "match_played:<match_id>:<user_id>", so
-    # automatic event hooks are safe to call more than once.
+    # Idempotency key, e.g. "tournament_played:<tournament_id>:<user_id>",
+    # so automatic event hooks are safe to call more than once.
     event_key: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, unique=True, index=True)
 
     def __repr__(self) -> str:
