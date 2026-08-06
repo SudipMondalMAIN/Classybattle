@@ -87,7 +87,7 @@ class TeamRead(BaseModel):
     tournament_id: UUID
     team_name: str
     captain_id: Optional[UUID] = None
-    invite_code: str
+    invite_code: Optional[str] = None
     team_size: int
     current_members: int
     status: TeamStatus

@@ -157,11 +157,15 @@ async def get_team_by_short_id(
 @router.get("/teams/{team_id}", response_model=TeamReadWithMembers)
 async def get_team_details(
     team_id: UUID,
+    current_user: User = Depends(get_current_active_verified_user),
     session: AsyncSession = Depends(get_db_session),
 ):
     service = TeamService(session)
     team = await service.get_team_details(team_id)
-    return TeamReadWithMembers.model_validate(team)
+    result = TeamReadWithMembers.model_validate(team)
+    if not await service.can_view_invite_code(team, current_user):
+        result.invite_code = None
+    return result
 
 
 @router.patch("/teams/{team_id}", response_model=TeamRead)

@@ -106,6 +106,23 @@ class TeamService:
     async def get_team_details(self, team_id: UUID) -> Team:
         return await self.get_team(team_id)
 
+    async def can_view_invite_code(self, team: Team, user: Optional[User]) -> bool:
+        """Only the team's own captain/members, the tournament organizer, or
+        an admin may see a team's invite code — anyone else scanning the
+        public teams list must not be able to read (and thus join) a team
+        they weren't invited to."""
+        if user is None:
+            return False
+        if self._is_admin(user):
+            return True
+        if team.captain_id == user.id:
+            return True
+        tournament = await self._get_tournament(team.tournament_id)
+        if self._is_organizer(tournament, user):
+            return True
+        membership = await self.member_repo.get_by_team_and_user(team.id, user.id)
+        return membership is not None
+
     async def get_team_by_short_id(self, short_id: int) -> Team:
         team = await self.repo.get_by_short_id(short_id)
         if team is None:
