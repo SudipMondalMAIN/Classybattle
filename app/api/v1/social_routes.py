@@ -105,9 +105,13 @@ async def _build_profile_read(
     ]
 
     user_summary_cls = PrivateUserSummary if reveal_contact else PublicUserSummary
-    user_summary = user_summary_cls.model_validate(target_user).model_copy(
-        update={"game_profiles": game_profiles}
-    )
+    user_summary_fields = {
+        name: getattr(target_user, name)
+        for name in user_summary_cls.model_fields
+        if name != "game_profiles"
+    }
+    user_summary_fields["game_profiles"] = game_profiles
+    user_summary = user_summary_cls.model_validate(user_summary_fields)
 
     data = model_cls.model_validate(profile).model_dump()
     data["user"] = user_summary
