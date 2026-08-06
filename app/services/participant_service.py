@@ -510,12 +510,9 @@ class ParticipantService:
 
         self._assert_valid_transition(participant.status, target_status)
 
-        if target_status == ParticipantStatus.CHECKED_IN and tournament.status not in (
-            TournamentStatus.REGISTRATION_CLOSED,
-            TournamentStatus.LIVE,
-        ):
+        if target_status == ParticipantStatus.CHECKED_IN and tournament.status != TournamentStatus.LIVE:
             raise ValidationException(
-                "Participants can only be checked in once registration has closed"
+                "Participants can only be checked in once the tournament is live"
             )
 
         was_active = participant.status in _ACTIVE_STATUSES

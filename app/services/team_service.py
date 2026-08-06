@@ -124,16 +124,11 @@ class TeamService:
     def _assert_registration_open(self, tournament: Tournament) -> None:
         if tournament.deleted_at is not None:
             raise NotFoundException("Tournament not found")
-        if tournament.status != TournamentStatus.REGISTRATION_OPEN:
+        if tournament.status != TournamentStatus.SCHEDULED:
             raise ValidationException(
-                f"Registration is not open for this tournament "
+                f"This tournament is not open to join "
                 f"(current status: '{tournament.status.value}')"
             )
-        now = datetime.now(timezone.utc)
-        if now < tournament.registration_start:
-            raise ValidationException("Registration has not started yet")
-        if now > tournament.registration_end:
-            raise ValidationException("Registration window has closed")
 
     async def _assert_max_teams_not_reached(self, tournament: Tournament) -> None:
         if tournament.max_teams is None:
@@ -588,13 +583,9 @@ class TeamService:
         tournament = await self._get_tournament(team.tournament_id)
         self._assert_is_captain_or_manager(tournament, team, current_user)
 
-        if tournament.status not in (
-            TournamentStatus.DRAFT,
-            TournamentStatus.PUBLISHED,
-            TournamentStatus.REGISTRATION_OPEN,
-        ):
+        if tournament.status != TournamentStatus.SCHEDULED:
             raise ValidationException(
-                "Teams can only be locked or unlocked before registration closes"
+                "Teams can only be locked or unlocked before the tournament goes live"
             )
 
         target_status = TeamStatus.LOCKED if is_locked else TeamStatus.FORMING

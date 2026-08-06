@@ -109,12 +109,10 @@ class AutoTeamAssignmentService:
             raise ValidationException(
                 "Automatic team assignment is only available for 'auto_random' tournaments"
             )
-        if tournament.status not in (
-            TournamentStatus.REGISTRATION_CLOSED,
-            TournamentStatus.LIVE,
-        ):
+        if tournament.status != TournamentStatus.LIVE:
             raise ValidationException(
-                "Automatic team assignment can only run after registration has closed"
+                "Automatic team assignment can only run once the tournament is live "
+                "(no more joins are being accepted)"
             )
 
         effective_team_size = team_size or tournament.team_size
