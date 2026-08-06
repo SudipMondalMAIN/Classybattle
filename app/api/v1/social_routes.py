@@ -113,7 +113,12 @@ async def _build_profile_read(
     user_summary_fields["game_profiles"] = game_profiles
     user_summary = user_summary_cls.model_validate(user_summary_fields)
 
-    data = model_cls.model_validate(profile).model_dump()
+    profile_fields = {
+        name: getattr(profile, name)
+        for name in model_cls.model_fields
+        if name not in ("user", "stats", "relationship_status", "is_following")
+    }
+    data = model_cls.model_validate(profile_fields).model_dump()
     data["user"] = user_summary
     data["stats"] = stats_summary
     data["relationship_status"] = relationship
