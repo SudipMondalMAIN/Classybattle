@@ -15,7 +15,12 @@ from app.models.team_member import TeamMemberRole
 # Team
 # ----------------------------------------------------------------------
 class TeamCreate(BaseModel):
-    team_name: str = Field(..., min_length=2, max_length=150)
+    team_name: Optional[str] = Field(
+        None,
+        min_length=2,
+        max_length=150,
+        description="Optional custom team name. If omitted, a random name is auto-generated.",
+    )
 
 
 class TeamUpdate(BaseModel):
@@ -42,6 +47,15 @@ class RemoveMember(BaseModel):
     user_id: UUID
 
 
+class TeamMemberUser(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    full_name: str
+    player_uid: str
+    avatar_id: Optional[str] = None
+
+
 class TeamMemberRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -51,6 +65,7 @@ class TeamMemberRead(BaseModel):
     participant_id: Optional[UUID] = None
     role: TeamMemberRole
     joined_at: datetime
+    user: Optional[TeamMemberUser] = None
 
 
 class TeamRead(BaseModel):

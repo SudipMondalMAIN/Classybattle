@@ -45,6 +45,27 @@ def generate_invite_code() -> str:
     return "".join(secrets.choice(alphabet) for _ in range(8))
 
 
+_RANDOM_TEAM_ADJECTIVES = [
+    "Blazing", "Silent", "Rapid", "Iron", "Crimson", "Shadow", "Savage",
+    "Frost", "Golden", "Rogue", "Phantom", "Storm", "Alpha", "Toxic",
+    "Venom", "Titan", "Rebel", "Fierce", "Dark", "Royal",
+]
+_RANDOM_TEAM_NOUNS = [
+    "Wolves", "Falcons", "Raiders", "Titans", "Warriors", "Reapers",
+    "Hunters", "Ghosts", "Vipers", "Knights", "Dragons", "Legion",
+    "Sharks", "Panthers", "Outlaws", "Guardians", "Phoenix", "Wraiths",
+]
+
+
+def generate_team_name() -> str:
+    """Random default team name (e.g. 'Crimson Wolves') used when the
+    creator does not supply a custom ``team_name``."""
+    adjective = secrets.choice(_RANDOM_TEAM_ADJECTIVES)
+    noun = secrets.choice(_RANDOM_TEAM_NOUNS)
+    suffix = "".join(secrets.choice("0123456789") for _ in range(3))
+    return f"{adjective} {noun} #{suffix}"
+
+
 class Team(ShortIdMixin, BaseModel):
     __tablename__ = "teams"
     __table_args__ = (

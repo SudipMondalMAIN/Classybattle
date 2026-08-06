@@ -33,7 +33,13 @@ from app.models.participant import (
     ParticipantStatus,
     RegistrationType,
 )
-from app.models.team import TEAM_STATUS_TRANSITIONS, Team, TeamStatus, generate_invite_code
+from app.models.team import (
+    TEAM_STATUS_TRANSITIONS,
+    Team,
+    TeamStatus,
+    generate_invite_code,
+    generate_team_name,
+)
 from app.models.team_member import TeamMember, TeamMemberRole
 from app.models.tournament import TeamRegistrationMode, Tournament, TournamentStatus
 from app.models.user import User, UserRole
@@ -141,6 +147,26 @@ class TeamService:
                 return candidate
         raise ConflictException("Could not generate a unique invite code, please retry")
 
+    async def _resolve_team_name(
+        self, tournament_id: UUID, requested_name: Optional[str]
+    ) -> str:
+        """Uses the requester's custom name if given (checked for uniqueness
+        within the tournament); otherwise auto-generates a random, unique
+        default name."""
+        if requested_name and requested_name.strip():
+            name = requested_name.strip()
+            if await self.repo.name_exists_in_tournament(tournament_id, name):
+                raise ConflictException(
+                    "A team with this name already exists in this tournament"
+                )
+            return name
+
+        for _ in range(10):
+            candidate = generate_team_name()
+            if not await self.repo.name_exists_in_tournament(tournament_id, candidate):
+                return candidate
+        raise ConflictException("Could not generate a unique team name, please retry")
+
     async def _assert_user_not_already_teamed(
         self, tournament_id: UUID, user_id: UUID
     ) -> None:
@@ -246,16 +272,12 @@ class TeamService:
         await self._assert_max_teams_not_reached(tournament)
         await self._assert_user_not_already_teamed(tournament.id, current_user.id)
 
-        if await self.repo.name_exists_in_tournament(tournament.id, payload.team_name):
-            raise ConflictException(
-                "A team with this name already exists in this tournament"
-            )
-
+        team_name = await self._resolve_team_name(tournament.id, payload.team_name)
         invite_code = await self._generate_unique_invite_code()
 
         team = await self.repo.create(
             tournament_id=tournament.id,
-            team_name=payload.team_name.strip(),
+            team_name=team_name,
             captain_id=current_user.id,
             invite_code=invite_code,
             team_size=tournament.team_size,
