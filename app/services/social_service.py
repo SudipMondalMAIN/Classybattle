@@ -171,9 +171,24 @@ class ProfileService:
         rows, total = await self.repo.search(
             query=query, page=page, page_size=page_size, sort_by=sort_by, sort_order=sort_order
         )
-        # Public search only ever surfaces public profiles.
-        public_rows = [(p, u) for p, u in rows if p.visibility == ProfileVisibility.PUBLIC]
-        return public_rows, total
+        # Visibility (public-only) is already enforced in the repository
+        # query -- including users who have no PlayerProfile row yet, who
+        # count as public by default. Auto-provision a real profile row for
+        # any such user so the response can be built normally and their
+        # search-visible state is persisted going forward.
+        resolved: list[tuple[PlayerProfile, User]] = []
+        for profile, user in rows:
+            if profile is None:
+                try:
+                    profile = await self.repo.create(user_id=user.id, display_name=user.full_name)
+                    await self.session.commit()
+                except IntegrityError:
+                    await self.session.rollback()
+                    profile = await self.repo.get_by_user_id(user.id)
+                    if profile is None:
+                        continue
+            resolved.append((profile, user))
+        return resolved, total
 
 
 class FriendshipService:

@@ -15,6 +15,7 @@ from app.models.social import (
     Friendship,
     FriendshipStatus,
     PlayerProfile,
+    ProfileVisibility,
 )
 from app.models.user import User
 from app.repositories.base import BaseRepository
@@ -39,32 +40,49 @@ class PlayerProfileRepository(BaseRepository[PlayerProfile]):
         page_size: int,
         sort_by: str,
         sort_order: str,
-    ) -> tuple[Sequence[tuple[PlayerProfile, User]], int]:
+    ) -> tuple[Sequence[tuple[Optional[PlayerProfile], User]], int]:
+        """Searches by user (name/UID) with the profile joined in when it
+        exists. Uses an OUTER join deliberately: a PlayerProfile row is only
+        ever created lazily (first time a user's profile is fetched/edited),
+        so an INNER join would silently hide every user who hasn't opened
+        their profile yet -- i.e. most of the user base -- from search
+        results entirely, by name AND by UID.
+        """
         sortable = {
-            "created_at": PlayerProfile.created_at,
-            "display_name": PlayerProfile.display_name,
-            "friends_count": PlayerProfile.friends_count,
-            "followers_count": PlayerProfile.followers_count,
+            "created_at": User.created_at,
+            "display_name": func.coalesce(PlayerProfile.display_name, User.full_name),
+            "friends_count": func.coalesce(PlayerProfile.friends_count, 0),
+            "followers_count": func.coalesce(PlayerProfile.followers_count, 0),
         }
-        order_col = sortable.get(sort_by, PlayerProfile.created_at)
+        order_col = sortable.get(sort_by, User.created_at)
         order_expr = order_col.desc() if sort_order.lower() == "desc" else order_col.asc()
 
+        base_filters = [
+            User.deleted_at.is_(None),
+            or_(PlayerProfile.deleted_at.is_(None), PlayerProfile.id.is_(None)),
+            or_(
+                PlayerProfile.visibility.is_(None),
+                PlayerProfile.visibility == ProfileVisibility.PUBLIC,
+            ),
+        ]
+
         stmt = (
-            select(PlayerProfile, User)
-            .join(User, User.id == PlayerProfile.user_id)
-            .where(PlayerProfile.deleted_at.is_(None), User.deleted_at.is_(None))
+            select(User, PlayerProfile)
+            .outerjoin(PlayerProfile, PlayerProfile.user_id == User.id)
+            .where(*base_filters)
         )
         count_stmt = (
-            select(func.count(PlayerProfile.id))
-            .join(User, User.id == PlayerProfile.user_id)
-            .where(PlayerProfile.deleted_at.is_(None), User.deleted_at.is_(None))
+            select(func.count(User.id))
+            .select_from(User)
+            .outerjoin(PlayerProfile, PlayerProfile.user_id == User.id)
+            .where(*base_filters)
         )
         if query:
             like = f"%{query.strip().lower()}%"
             search_filter = or_(
                 func.lower(User.full_name).like(like),
-                func.lower(PlayerProfile.display_name).like(like),
                 func.lower(User.player_uid).like(like),
+                func.lower(PlayerProfile.display_name).like(like),
             )
             stmt = stmt.where(search_filter)
             count_stmt = count_stmt.where(search_filter)
@@ -73,7 +91,10 @@ class PlayerProfileRepository(BaseRepository[PlayerProfile]):
 
         total = (await self.session.execute(count_stmt)).scalar_one()
         rows = (await self.session.execute(stmt)).all()
-        return [(r[0], r[1]) for r in rows], total
+        # Return (profile, user) to match the existing (PlayerProfile, User)
+        # contract used by callers -- profile may be None for users who
+        # haven't had one lazily created yet.
+        return [(r[1], r[0]) for r in rows], total
 
 
 class FriendshipRepository(BaseRepository[Friendship]):
