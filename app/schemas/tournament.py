@@ -55,8 +55,44 @@ class TournamentCreate(BaseModel):
                 "team_size must be at least 2 for 'team_invite' or 'auto_random' modes"
             )
 
+    @staticmethod
+    def _validate_capacity(
+        registration_mode: TeamRegistrationMode,
+        team_size: int,
+        max_players: int,
+        max_teams: Optional[int],
+    ) -> None:
+        """For team-based tournaments, max_players is the total player-slot
+        capacity, not the number of teams. Left unchecked, an organizer who
+        sets max_players to (for example) the intended number of teams will
+        find every team capped at 1 member as soon as the first team fills
+        that slot -- so we enforce that max_players is always big enough to
+        hold at least one full team, and exactly matches max_teams *
+        team_size when both are given."""
+        if registration_mode == TeamRegistrationMode.SOLO:
+            return
+        if max_players < team_size:
+            raise ValueError(
+                f"max_players ({max_players}) must be at least team_size "
+                f"({team_size}) -- it counts total players across all teams, "
+                f"not number of teams"
+            )
+        if max_players % team_size != 0:
+            raise ValueError(
+                f"max_players ({max_players}) must be a multiple of team_size "
+                f"({team_size}) so every team slot can be filled"
+            )
+        if max_teams is not None and max_teams * team_size != max_players:
+            raise ValueError(
+                f"max_players ({max_players}) must equal max_teams * team_size "
+                f"({max_teams} * {team_size} = {max_teams * team_size})"
+            )
+
     def model_post_init(self, __context) -> None:
         self._validate_team_size(self.registration_mode, self.team_size)
+        self._validate_capacity(
+            self.registration_mode, self.team_size, self.max_players, self.max_teams
+        )
 
 
 class TournamentUpdate(BaseModel):

@@ -117,6 +117,13 @@ class Friendship(BaseModel):
     )
     responded_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    requester: Mapped["User"] = relationship(  # noqa: F821
+        foreign_keys=[requester_id], lazy="selectin"
+    )
+    addressee: Mapped["User"] = relationship(  # noqa: F821
+        foreign_keys=[addressee_id], lazy="selectin"
+    )
+
     def __repr__(self) -> str:
         return f"<Friendship {self.requester_id}->{self.addressee_id} status={self.status}>"
 

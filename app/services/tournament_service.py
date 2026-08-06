@@ -284,6 +284,16 @@ class TournamentService:
             new_map_id = update_data.get("map_id", tournament.map_id)
             await self._assert_mode_and_map_valid(tournament.game_id, new_mode_id, new_map_id)
 
+        if "max_players" in update_data or "max_teams" in update_data:
+            new_max_players = update_data.get("max_players", tournament.max_players)
+            new_max_teams = update_data.get("max_teams", tournament.max_teams)
+            TournamentCreate._validate_capacity(
+                tournament.registration_mode,
+                tournament.team_size,
+                new_max_players,
+                new_max_teams,
+            )
+
         old_values = {key: getattr(tournament, key) for key in update_data}
         tournament = await self.repo.update(tournament, **update_data)
         await self.audit.record(

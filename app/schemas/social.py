@@ -101,6 +101,14 @@ class FriendRequestCreate(BaseModel):
     addressee_id: UUID
 
 
+class FriendshipUserBrief(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    full_name: str
+    player_uid: str
+
+
 class FriendshipRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -110,6 +118,8 @@ class FriendshipRead(BaseModel):
     status: FriendshipStatus
     created_at: datetime
     responded_at: Optional[datetime] = None
+    requester: Optional[FriendshipUserBrief] = None
+    addressee: Optional[FriendshipUserBrief] = None
 
 
 class FriendListItem(BaseModel):
