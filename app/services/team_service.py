@@ -20,6 +20,7 @@ from datetime import datetime, timezone
 from typing import Optional
 from uuid import UUID
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import (
@@ -33,6 +34,7 @@ from app.models.participant import (
     ParticipantStatus,
     RegistrationType,
 )
+from app.models.game_profile import UserGameProfile
 from app.models.team import (
     TEAM_STATUS_TRANSITIONS,
     Team,
@@ -177,10 +179,58 @@ class TeamService:
             )
 
     # ------------------------------------------------------------------
+    # Game profile resolution (needed to actually register a Participant)
+    # ------------------------------------------------------------------
+    async def _resolve_game_profile_id(
+        self, tournament: Tournament, user: User, requested_id: Optional[UUID]
+    ) -> UUID:
+        """Resolves which of the user's game profiles backs this team
+        membership. If the caller supplied one, it's validated (must belong
+        to the user and match the tournament's game). Otherwise we fall
+        back to the user's existing profile for that game, if there's
+        exactly one — ambiguous/missing cases raise so the client can
+        prompt the user to pick or create one."""
+        if requested_id is not None:
+            stmt = select(UserGameProfile).where(
+                UserGameProfile.id == requested_id,
+                UserGameProfile.deleted_at.is_(None),
+            )
+            result = await self.session.execute(stmt)
+            profile = result.scalar_one_or_none()
+            if profile is None:
+                raise NotFoundException("Game profile not found")
+            if profile.user_id != user.id:
+                raise ForbiddenException("This game profile does not belong to you")
+            if profile.game_id != tournament.game_id:
+                raise ValidationException(
+                    "The selected game profile does not match this tournament's game"
+                )
+            return profile.id
+
+        stmt = select(UserGameProfile).where(
+            UserGameProfile.user_id == user.id,
+            UserGameProfile.game_id == tournament.game_id,
+            UserGameProfile.deleted_at.is_(None),
+        )
+        result = await self.session.execute(stmt)
+        profiles = result.scalars().all()
+        if not profiles:
+            raise ValidationException(
+                "You need a game profile for this tournament's game before "
+                "joining a team. Add one in your profile first."
+            )
+        if len(profiles) > 1:
+            raise ValidationException(
+                "You have multiple game profiles for this game — specify "
+                "which one to use with game_profile_id."
+            )
+        return profiles[0].id
+
+    # ------------------------------------------------------------------
     # Participant sync (keeps Phase 5 capacity/payment tracking correct)
     # ------------------------------------------------------------------
     async def _ensure_participant_for_member(
-        self, tournament: Tournament, team: Team, user: User
+        self, tournament: Tournament, team: Team, user: User, game_profile_id: UUID
     ) -> UUID:
         """Creates (or reactivates) the Participant row backing this team
         membership so tournament capacity, payment, and check-in continue to
@@ -204,6 +254,7 @@ class TeamService:
         if existing is not None:
             participant = await self.participant_repo.update(
                 existing,
+                game_profile_id=game_profile_id,
                 registration_type=RegistrationType.TEAM,
                 team_name=team.team_name,
                 status=ParticipantStatus.PENDING,
@@ -215,13 +266,16 @@ class TeamService:
                 joined_at=datetime.now(timezone.utc),
             )
         else:
-            # game_profile_id is normally required for a Participant, but the
-            # Team system is game-profile agnostic (a team can be formed
-            # before any player has selected a per-game profile), so we defer
-            # to whichever profile flow the client already used elsewhere in
-            # Phase 5 if present, otherwise leave capacity tracking to the
-            # Team model itself and skip Participant creation.
-            return None  # noqa: RET504 — no game profile available yet
+            participant = await self.participant_repo.create(
+                tournament_id=tournament.id,
+                user_id=user.id,
+                game_profile_id=game_profile_id,
+                registration_type=RegistrationType.TEAM,
+                team_name=team.team_name,
+                status=ParticipantStatus.PENDING,
+                payment_status=payment_status,
+                entry_fee_paid=0,
+            )
 
         active_count = await self.participant_repo.count_active_for_tournament(tournament.id)
         if active_count > tournament.max_players:
@@ -272,6 +326,10 @@ class TeamService:
         await self._assert_max_teams_not_reached(tournament)
         await self._assert_user_not_already_teamed(tournament.id, current_user.id)
 
+        game_profile_id = await self._resolve_game_profile_id(
+            tournament, current_user, payload.game_profile_id
+        )
+
         team_name = await self._resolve_team_name(tournament.id, payload.team_name)
         invite_code = await self._generate_unique_invite_code()
 
@@ -287,7 +345,7 @@ class TeamService:
         )
 
         participant_id = await self._ensure_participant_for_member(
-            tournament, team, current_user
+            tournament, team, current_user, game_profile_id
         )
         await self.member_repo.create(
             team_id=team.id,
@@ -345,7 +403,7 @@ class TeamService:
     # Join / Leave / Remove / Transfer
     # ------------------------------------------------------------------
     async def join_team(
-        self, tournament_id: UUID, invite_code: str, current_user: User
+        self, tournament_id: UUID, invite_code: str, current_user: User, game_profile_id: Optional[UUID] = None
     ) -> Team:
         tournament = await self._get_tournament(tournament_id)
         self._assert_team_mode_tournament(tournament)
@@ -371,8 +429,12 @@ class TeamService:
         if team.current_members >= team.team_size:
             raise ConflictException("This team has reached its maximum size")
 
+        resolved_game_profile_id = await self._resolve_game_profile_id(
+            tournament, current_user, game_profile_id
+        )
+
         participant_id = await self._ensure_participant_for_member(
-            tournament, team, current_user
+            tournament, team, current_user, resolved_game_profile_id
         )
         await self.member_repo.create(
             team_id=team.id,

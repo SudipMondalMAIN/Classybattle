@@ -63,7 +63,9 @@ async def join_team(
     session: AsyncSession = Depends(get_db_session),
 ):
     service = TeamService(session)
-    team = await service.join_team(tournament_id, payload.invite_code, current_user)
+    team = await service.join_team(
+        tournament_id, payload.invite_code, current_user, payload.game_profile_id
+    )
     return TeamRead.model_validate(team)
 
 

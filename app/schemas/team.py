@@ -21,6 +21,11 @@ class TeamCreate(BaseModel):
         max_length=150,
         description="Optional custom team name. If omitted, a random name is auto-generated.",
     )
+    game_profile_id: Optional[UUID] = Field(
+        None,
+        description="Which game profile backs this registration. If omitted, "
+        "your existing profile for this tournament's game is used (must be unambiguous).",
+    )
 
 
 class TeamUpdate(BaseModel):
@@ -29,6 +34,11 @@ class TeamUpdate(BaseModel):
 
 class TeamJoin(BaseModel):
     invite_code: str = Field(..., min_length=4, max_length=16)
+    game_profile_id: Optional[UUID] = Field(
+        None,
+        description="Which game profile backs this registration. If omitted, "
+        "your existing profile for this tournament's game is used (must be unambiguous).",
+    )
 
 
 class TeamLockUpdate(BaseModel):

@@ -177,16 +177,20 @@ class ParticipantService:
     ) -> None:
         """Validates team-based registrations.
 
-        `team_name` is free-form for tournaments that don't pre-create Team
-        rows (Phase 5 behaviour is preserved), but if a Team row *does*
-        already exist for this tournament+name (Phase 6 Team system), the
-        user must actually be a member of it and it must not be disbanded —
-        otherwise anyone could "register" under an arbitrary team's name.
+        Squad/duo/team registrations must go through the real Team system
+        (create-team / join-with-invite-code) first — a bare `team_name`
+        string with no backing Team row is no longer accepted, since that
+        let people "register" for a squad slot without ever forming an
+        actual team (no invite code, no teammates, nothing to check in
+        together).
         """
         if payload.registration_type not in _TEAM_REGISTRATION_TYPES:
             return
         if not payload.team_name:
-            raise ValidationException("team_name is required for team-based registrations")
+            raise ValidationException(
+                "team_name is required for team-based registrations. "
+                "Create or join a team first, then register."
+            )
 
         from app.models.team import Team, TeamStatus  # local import avoids a circular import
 
@@ -198,9 +202,11 @@ class ParticipantService:
         result = await self.session.execute(stmt)
         team = result.scalar_one_or_none()
         if team is None:
-            # No pre-registered team for this name yet — allowed (ad hoc
-            # team name), nothing further to validate.
-            return
+            raise ValidationException(
+                "No team with this name exists for this tournament. "
+                "Create a team or join one with an invite code first — "
+                "ad-hoc team names are no longer accepted."
+            )
 
         if team.status == TeamStatus.DISBANDED:
             raise ValidationException("This team has been disbanded and cannot register")
