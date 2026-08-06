@@ -74,6 +74,7 @@ from app.repositories.payment_repository import (
 )
 from app.services.audit_service import AuditService
 from app.services.wallet_service import WalletService
+from app.utils.txn_id import generate_unique_txn_no
 
 _ADMIN_ROLES = (UserRole.ADMIN, UserRole.SUPER_ADMIN)
 _TERMINAL_STATUSES = (
@@ -226,6 +227,8 @@ class PaymentService:
             note=settings_row.payment_note,
         )
 
+        txn_no = await generate_unique_txn_no(self.session, PaymentRequest)
+
         try:
             payment_request = await self.request_repo.create(
                 user_id=user.id,
@@ -237,6 +240,7 @@ class PaymentService:
                 screenshot_url=screenshot_url,
                 utr_number=utr_number,
                 status=PaymentRequestStatus.PENDING,
+                txn_no=txn_no,
             )
         except IntegrityError as exc:
             await self.session.rollback()

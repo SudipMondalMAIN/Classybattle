@@ -23,6 +23,7 @@ class WithdrawalRequestRead(BaseModel):
 
     id: UUID
     short_id: int
+    txn_no: str
     user_id: UUID
     amount: Decimal
     currency: str

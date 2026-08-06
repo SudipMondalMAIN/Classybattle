@@ -19,6 +19,7 @@ from app.notifications.dispatch_service import NotificationDispatchService
 from app.schemas.withdrawal import WithdrawalRequestCreate
 from app.services.payment_method_service import PaymentMethodService
 from app.services.wallet_service import WalletService
+from app.utils.txn_id import generate_unique_txn_no
 
 _REFERENCE_TYPE = "withdrawal_request"
 
@@ -39,6 +40,8 @@ class WithdrawalService:
         if not method.is_active:
             raise BadRequestException("This payment method is not active")
 
+        txn_no = await generate_unique_txn_no(self.session, WithdrawalRequest)
+
         withdrawal = WithdrawalRequest(
             user_id=user.id,
             amount=payload.amount,
@@ -46,6 +49,7 @@ class WithdrawalService:
             method_type=method.method_type,
             method_details=method.as_snapshot(),
             status=WithdrawalStatus.PENDING,
+            txn_no=txn_no,
         )
         self.session.add(withdrawal)
         await self.session.flush()

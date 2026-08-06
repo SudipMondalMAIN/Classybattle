@@ -14,7 +14,15 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Optional
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, Numeric, String
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    Numeric,
+    String,
+    UniqueConstraint,
+)
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -34,9 +42,14 @@ class WithdrawalRequest(ShortIdMixin, BaseModel):
     __tablename__ = "withdrawal_requests"
     __table_args__ = (
         CheckConstraint("amount > 0", name="ck_withdrawal_requests_amount_positive"),
+        UniqueConstraint("txn_no", name="uq_withdrawal_requests_txn_no"),
         Index("ix_withdrawal_requests_user_status", "user_id", "status"),
         Index("ix_withdrawal_requests_status_created", "status", "created_at"),
     )
+
+    # 10-digit numeric transaction reference shown to the user, distinct
+    # from the internal UUID `id` and the admin-facing `short_id`.
+    txn_no: Mapped[str] = mapped_column(String(10), nullable=False, index=True)
 
     user_id: Mapped[uuid.UUID] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True

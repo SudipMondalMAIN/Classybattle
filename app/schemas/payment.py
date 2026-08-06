@@ -71,6 +71,7 @@ class PaymentRequestRead(BaseModel):
 
     id: UUID
     short_id: int
+    txn_no: str
     user_id: UUID
     provider: PaymentProvider
     amount: Decimal

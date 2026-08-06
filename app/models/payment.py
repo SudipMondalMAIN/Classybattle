@@ -121,9 +121,14 @@ class PaymentRequest(ShortIdMixin, BaseModel):
         # A given UTR may only ever be submitted once across the whole
         # table — the core defence against duplicate-UTR fraud.
         UniqueConstraint("utr_number", name="uq_payment_requests_utr_number"),
+        UniqueConstraint("txn_no", name="uq_payment_requests_txn_no"),
         Index("ix_payment_requests_user_status", "user_id", "status"),
         Index("ix_payment_requests_status_submitted", "status", "submitted_at"),
     )
+
+    # 10-digit numeric transaction reference shown to the user, distinct
+    # from the internal UUID `id` and the admin-facing `short_id`.
+    txn_no: Mapped[str] = mapped_column(String(10), nullable=False, index=True)
 
     user_id: Mapped[uuid.UUID] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
