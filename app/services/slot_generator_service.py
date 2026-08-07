@@ -33,11 +33,13 @@ class SlotGeneratorService:
 
     @staticmethod
     def _max_players_for(template: Tournament) -> int:
-        if template.category is None or template.category.value == "solo":
-            return template.max_players
-        # Squad-style schedule: max_players is expressed in squads, so the
-        # actual player capacity is squads * squad_size.
-        return template.max_players * template.squad_size
+        # `max_players` on the schedule template is already the total
+        # player capacity for the slot (what the admin enters as "Max
+        # Players per Slot") -- it must be copied as-is. squad_size only
+        # controls how those players get auto-grouped into teams; it must
+        # NOT be multiplied in here, or Squad slots end up with a wildly
+        # inflated capacity (e.g. 8 players / squad 4 -> 32 instead of 8).
+        return template.max_players
 
     async def generate_for_day(
         self, template: Tournament, target_date: date
