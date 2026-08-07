@@ -28,7 +28,13 @@ class AppVersion(BaseModel):
     )
 
     platform: Mapped[AppPlatform] = mapped_column(
-        Enum(AppPlatform, name="app_platform"), nullable=False, index=True
+        Enum(
+            AppPlatform,
+            name="app_platform",
+            values_callable=lambda enum_cls: [e.value for e in enum_cls],
+        ),
+        nullable=False,
+        index=True,
     )
 
     # Newest version published to the store.
