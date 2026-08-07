@@ -199,6 +199,47 @@ class SlotJoinService:
             tournament_team_id=tournament_team.id, user_id=current_user.id
         )
 
+        # Mirror a Participant row for this membership so "my registrations" /
+        # "my teams" (GET /tournaments/{id}/registration) and payment/check-in
+        # flows see this join, exactly as the solo path does above.
+        from app.models.participant import (
+            ParticipantPaymentStatus,
+            ParticipantStatus,
+            RegistrationType,
+        )
+
+        existing_participant = await self.participant_repo.get_by_tournament_and_user(
+            tournament.id, current_user.id
+        )
+        payment_status = (
+            ParticipantPaymentStatus.PAID
+            if tournament.entry_fee and tournament.entry_fee > 0
+            else ParticipantPaymentStatus.NOT_REQUIRED
+        )
+        if existing_participant is None:
+            await self.participant_repo.create(
+                tournament_id=tournament.id,
+                user_id=current_user.id,
+                game_profile_id=game_profile.id,
+                registration_type=RegistrationType.TEAM,
+                team_name=tournament_team.team_name,
+                status=ParticipantStatus.CONFIRMED,
+                payment_status=payment_status,
+                entry_fee_paid=tournament.entry_fee if payment_status == ParticipantPaymentStatus.PAID else 0,
+            )
+        else:
+            await self.participant_repo.update(
+                existing_participant,
+                game_profile_id=game_profile.id,
+                registration_type=RegistrationType.TEAM,
+                team_name=tournament_team.team_name,
+                status=ParticipantStatus.CONFIRMED,
+                payment_status=payment_status,
+                entry_fee_paid=tournament.entry_fee if payment_status == ParticipantPaymentStatus.PAID else 0,
+                cancelled_at=None,
+                joined_at=datetime.now(timezone.utc),
+            )
+
         new_count = tournament_team.current_members + 1
         team_full = new_count >= tournament_team.team_size
         tournament_team = await self.tournament_team_repo.update(

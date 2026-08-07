@@ -50,8 +50,10 @@ from app.repositories.team_member_repository import TeamMemberRepository
 from app.repositories.team_repository import TeamRepository
 from app.repositories.tournament_repository import TournamentRepository
 from app.schemas.team import TeamCreate, TeamUpdate
+from app.services.wallet_service import WalletService
 
 _MANAGER_ROLES = {UserRole.ADMIN, UserRole.SUPER_ADMIN}
+_WALLET_TEAM_ENTRY_REF_TYPE = "team_tournament_entry_fee"
 
 
 class TeamService:
@@ -61,6 +63,23 @@ class TeamService:
         self.member_repo = TeamMemberRepository(session)
         self.tournament_repo = TournamentRepository(session)
         self.participant_repo = ParticipantRepository(session)
+        self.wallet_service = WalletService(session)
+
+    async def _charge_entry_fee(self, tournament: Tournament, user: User) -> None:
+        """Debit the entry fee from the user's wallet before they're turned
+        into a Participant. Mirrors SlotJoinService._charge_entry_fee so
+        squad-invite / squad-random / solo all pay the same way."""
+        fee = tournament.entry_fee
+        if not fee or fee <= 0:
+            return
+        await self.wallet_service.debit(
+            user,
+            amount=fee,
+            reference_type=_WALLET_TEAM_ENTRY_REF_TYPE,
+            reference_id=str(tournament.id),
+            description=f"Entry fee for '{tournament.title}'",
+            commit=False,
+        )
 
     # ------------------------------------------------------------------
     # Authorization helpers
@@ -251,17 +270,21 @@ class TeamService:
             tournament.id, user.id
         )
 
-        payment_status = (
-            ParticipantPaymentStatus.PENDING
-            if tournament.entry_fee and tournament.entry_fee > 0
-            else ParticipantPaymentStatus.NOT_REQUIRED
-        )
-
         if existing is not None and existing.status not in (
             ParticipantStatus.CANCELLED,
             ParticipantStatus.REJECTED,
         ):
             raise ConflictException("You are already registered for this tournament")
+
+        # Charge the entry fee up front — the user only becomes a
+        # participant (and only then can they create/share an invite code)
+        # once payment has actually gone through, same as solo registration.
+        await self._charge_entry_fee(tournament, user)
+        has_fee = bool(tournament.entry_fee and tournament.entry_fee > 0)
+        payment_status = (
+            ParticipantPaymentStatus.PAID if has_fee else ParticipantPaymentStatus.NOT_REQUIRED
+        )
+        entry_fee_paid = tournament.entry_fee if has_fee else 0
 
         if existing is not None:
             participant = await self.participant_repo.update(
@@ -269,10 +292,10 @@ class TeamService:
                 game_profile_id=game_profile_id,
                 registration_type=RegistrationType.TEAM,
                 team_name=team.team_name,
-                status=ParticipantStatus.PENDING,
+                status=ParticipantStatus.CONFIRMED,
                 payment_status=payment_status,
                 payment_reference=None,
-                entry_fee_paid=0,
+                entry_fee_paid=entry_fee_paid,
                 cancelled_at=None,
                 checked_in_at=None,
                 joined_at=datetime.now(timezone.utc),
@@ -284,9 +307,9 @@ class TeamService:
                 game_profile_id=game_profile_id,
                 registration_type=RegistrationType.TEAM,
                 team_name=team.team_name,
-                status=ParticipantStatus.PENDING,
+                status=ParticipantStatus.CONFIRMED,
                 payment_status=payment_status,
-                entry_fee_paid=0,
+                entry_fee_paid=entry_fee_paid,
             )
 
         active_count = await self.participant_repo.count_active_for_tournament(tournament.id)
