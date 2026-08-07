@@ -42,6 +42,25 @@ class ScheduleCreate(BaseModel):
     def _check_times(cls, v):
         return _validate_times(v)
 
+    @model_validator(mode="after")
+    def _check_squad_capacity(self) -> "ScheduleCreate":
+        # category drives registration_mode downstream (SQUAD -> AUTO_RANDOM,
+        # team_size=squad_size). Guard the capacity math here too so a SQUAD
+        # schedule can never be created with a max_players_per_slot that
+        # doesn't divide evenly into full squads.
+        if self.category == ScheduleCategory.SQUAD:
+            if self.max_players_per_slot < self.squad_size:
+                raise ValueError(
+                    f"max_players_per_slot ({self.max_players_per_slot}) must be at least "
+                    f"squad_size ({self.squad_size})"
+                )
+            if self.max_players_per_slot % self.squad_size != 0:
+                raise ValueError(
+                    f"max_players_per_slot ({self.max_players_per_slot}) must be a multiple "
+                    f"of squad_size ({self.squad_size}) so every squad slot can be filled"
+                )
+        return self
+
 
 class ScheduleUpdate(BaseModel):
     entry_fee: Optional[Decimal] = Field(None, ge=0)

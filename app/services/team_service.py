@@ -663,6 +663,29 @@ class TeamService:
             include_deleted=True,
         )
 
+    async def list_teams_admin(
+        self,
+        *,
+        page: int,
+        page_size: int,
+        status: Optional[TeamStatus],
+        search: Optional[str],
+        sort_by: str,
+        sort_order: str,
+    ):
+        """Cross-tournament team listing for platform admins -- no
+        tournament_id required. Caller must already be admin-gated at the
+        route level (require_admin)."""
+        return await self.repo.list_all(
+            page=page,
+            page_size=page_size,
+            status=status,
+            search=search,
+            sort_by=sort_by,
+            sort_order=sort_order,
+            include_deleted=True,
+        )
+
     async def get_team_members(self, team_id: UUID) -> list[TeamMember]:
         team = await self.get_team(team_id)
         return await self.member_repo.list_for_team(team.id)

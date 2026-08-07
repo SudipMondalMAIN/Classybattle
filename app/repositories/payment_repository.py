@@ -90,6 +90,13 @@ class PaymentRequestRepository:
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
+    async def get_by_txn_no(self, txn_no: str) -> Optional[PaymentRequest]:
+        stmt = select(PaymentRequest).where(
+            PaymentRequest.txn_no == txn_no, PaymentRequest.deleted_at.is_(None)
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
     async def get_by_utr(self, utr_number: str) -> Optional[PaymentRequest]:
         stmt = select(PaymentRequest).where(PaymentRequest.utr_number == utr_number)
         result = await self.session.execute(stmt)

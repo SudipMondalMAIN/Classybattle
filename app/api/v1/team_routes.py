@@ -104,6 +104,41 @@ async def list_tournament_teams(
 
 
 @router.get(
+    "/admin/teams",
+    response_model=PaginatedTeams,
+)
+async def list_all_teams_admin(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    status: Optional[TeamStatus] = Query(None),
+    search: Optional[str] = Query(None, max_length=200),
+    sort_by: str = Query("created_at"),
+    sort_order: str = Query("desc", pattern="^(?i)(asc|desc)$"),
+    current_user: User = Depends(require_admin),
+    session: AsyncSession = Depends(get_db_session),
+):
+    """Every team across every tournament -- admin panel's global Teams
+    list, no tournament_id needed."""
+    service = TeamService(session)
+    items, total = await service.list_teams_admin(
+        page=page,
+        page_size=page_size,
+        status=status,
+        search=search,
+        sort_by=sort_by,
+        sort_order=sort_order,
+    )
+    total_pages = math.ceil(total / page_size) if total else 0
+    return PaginatedTeams(
+        items=[TeamListItem.model_validate(t) for t in items],
+        total=total,
+        page=page,
+        page_size=page_size,
+        total_pages=total_pages,
+    )
+
+
+@router.get(
     "/tournaments/{tournament_id}/teams/manage",
     response_model=PaginatedTeams,
 )

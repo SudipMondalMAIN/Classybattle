@@ -137,6 +137,14 @@ class WithdrawalService:
             raise NotFoundException("Withdrawal request not found")
         return withdrawal
 
+    async def get_for_admin_by_txn_no(self, txn_no: str) -> WithdrawalRequest:
+        stmt = select(WithdrawalRequest).where(WithdrawalRequest.txn_no == txn_no)
+        result = await self.session.execute(stmt)
+        withdrawal = result.scalar_one_or_none()
+        if withdrawal is None:
+            raise NotFoundException("Withdrawal request not found for this transaction number")
+        return withdrawal
+
     async def complete(
         self, admin: User, withdrawal_id: UUID, admin_note: Optional[str]
     ) -> WithdrawalRequest:

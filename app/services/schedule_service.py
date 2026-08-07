@@ -14,7 +14,13 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import ConflictException, NotFoundException, ValidationException
-from app.models.tournament import Tournament, TournamentStatus, TournamentVisibility
+from app.models.tournament import (
+    ScheduleCategory,
+    TeamRegistrationMode,
+    Tournament,
+    TournamentStatus,
+    TournamentVisibility,
+)
 from app.models.user import User
 from app.repositories.game_repository import GameRepository
 from app.repositories.tournament_repository import TournamentRepository
@@ -35,6 +41,20 @@ class ScheduleService:
         if game is None:
             raise ValidationException("game_id does not refer to an existing game")
         return game
+
+    @staticmethod
+    def _registration_mode_for_category(
+        category: ScheduleCategory, squad_size: int
+    ) -> tuple[TeamRegistrationMode, int]:
+        """SQUAD schedules must generate tournaments where players are
+        auto-grouped into fixed-size squads -- never left as
+        registration_mode=SOLO (the Tournament model's default), which
+        would silently show every generated match as solo-mode while the
+        title/icon still say Squad. SOLO schedules stay solo, team_size=1.
+        """
+        if category == ScheduleCategory.SQUAD:
+            return TeamRegistrationMode.AUTO_RANDOM, squad_size
+        return TeamRegistrationMode.SOLO, 1
 
     async def create_schedule(
         self, payload: ScheduleCreate, current_user: User
@@ -57,6 +77,10 @@ class ScheduleService:
             suffix += 1
             slug = f"{base_slug}-{suffix}"
 
+        registration_mode, team_size = self._registration_mode_for_category(
+            payload.category, payload.squad_size
+        )
+
         tournament = await self.repo.create(
             # Template row -- never joined directly, so status/visibility
             # here are just harmless defaults.
@@ -76,6 +100,11 @@ class ScheduleService:
             max_players=payload.max_players_per_slot,
             daily_slot_times=sorted(set(payload.daily_slot_times)),
             created_by=current_user.id,
+            # Derived from category so generated matches never end up
+            # mislabeled solo under a Squad title (see
+            # _registration_mode_for_category).
+            registration_mode=registration_mode,
+            team_size=team_size,
         )
         await self.session.commit()
         await self.session.refresh(tournament)
@@ -88,6 +117,13 @@ class ScheduleService:
         update_data = payload.model_dump(exclude_unset=True)
         if "daily_slot_times" in update_data and update_data["daily_slot_times"] is not None:
             update_data["daily_slot_times"] = sorted(set(update_data["daily_slot_times"]))
+        if "squad_size" in update_data and update_data["squad_size"] is not None:
+            # Keep team_size in sync so future generated matches still
+            # match the schedule's category/squad_size correctly.
+            _, team_size = self._registration_mode_for_category(
+                schedule.category, update_data["squad_size"]
+            )
+            update_data["team_size"] = team_size
         schedule = await self.repo.update(schedule, **update_data)
         await self.session.commit()
         await self.session.refresh(schedule)

@@ -120,3 +120,49 @@ class TeamRepository(BaseRepository[Team]):
         )
         result = await self.session.execute(stmt)
         return result.scalars().all()
+
+    async def list_all(
+        self,
+        *,
+        page: int = 1,
+        page_size: int = 20,
+        status: Optional[TeamStatus] = None,
+        search: Optional[str] = None,
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
+        include_deleted: bool = False,
+    ) -> tuple[Sequence[Team], int]:
+        """Global, cross-tournament team listing for the admin panel — no
+        tournament_id required. Same filter/sort/pagination shape as
+        list_for_tournament, just without the tournament_id condition."""
+        conditions = []
+        if not include_deleted:
+            conditions.append(Team.deleted_at.is_(None))
+        if status is not None:
+            conditions.append(Team.status == status)
+        if search:
+            q = search.strip()
+            like = f"%{q.lower()}%"
+            search_conditions = [
+                func.lower(cast(Team.team_name, String)).like(like),
+                func.lower(cast(Team.team_uid, String)).like(like),
+            ]
+            if q.isdigit():
+                search_conditions.append(Team.short_id == int(q))
+            conditions.append(or_(*search_conditions))
+
+        count_stmt = select(func.count(Team.id))
+        if conditions:
+            count_stmt = count_stmt.where(*conditions)
+        total = (await self.session.execute(count_stmt)).scalar_one()
+
+        sort_column = _SORTABLE_FIELDS.get(sort_by, Team.created_at)
+        order_fn = asc if sort_order.lower() == "asc" else desc
+
+        stmt = select(Team).order_by(order_fn(sort_column)).offset((page - 1) * page_size).limit(
+            page_size
+        )
+        if conditions:
+            stmt = stmt.where(*conditions)
+        result = await self.session.execute(stmt)
+        return result.scalars().all(), total

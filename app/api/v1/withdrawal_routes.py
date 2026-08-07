@@ -123,6 +123,18 @@ async def admin_get_withdrawal_by_short_id(
     return WithdrawalRequestRead.model_validate(withdrawal)
 
 
+@router.get("/admin/withdrawals/txn/{txn_no}", response_model=WithdrawalRequestRead)
+async def admin_get_withdrawal_by_txn_no(
+    txn_no: str,
+    session: AsyncSession = Depends(get_db_session),
+    _admin=Depends(require_admin),
+):
+    """Admin lookup by the 10-digit transaction number shown to the user."""
+    service = WithdrawalService(session)
+    withdrawal = await service.get_for_admin_by_txn_no(txn_no)
+    return WithdrawalRequestRead.model_validate(withdrawal)
+
+
 @router.get("/admin/withdrawals/{withdrawal_id}", response_model=WithdrawalRequestRead)
 async def admin_get_withdrawal(
     withdrawal_id: UUID,

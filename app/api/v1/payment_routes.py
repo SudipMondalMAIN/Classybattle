@@ -212,6 +212,18 @@ async def admin_get_deposit_by_short_id(
     return PaymentRequestRead.model_validate(payment_request)
 
 
+@router.get("/admin/payments/deposits/txn/{txn_no}", response_model=PaymentRequestRead)
+async def admin_get_deposit_by_txn_no(
+    txn_no: str,
+    _admin: User = Depends(require_admin),
+    session: AsyncSession = Depends(get_db_session),
+):
+    """Admin lookup by the 10-digit transaction number shown to the user."""
+    service = PaymentService(session)
+    payment_request = await service.get_request_for_admin_by_txn_no(txn_no)
+    return PaymentRequestRead.model_validate(payment_request)
+
+
 @router.get("/admin/payments/deposits/{payment_request_id}", response_model=PaymentRequestRead)
 async def admin_get_deposit(
     payment_request_id: UUID,
