@@ -35,8 +35,11 @@ class AppVersionService:
     async def upsert(self, platform: AppPlatform, payload: AppVersionUpsert) -> AppVersion:
         existing = await self.repo.get_by_platform(platform)
         if existing is None:
-            return await self.repo.create(platform=platform, **payload.model_dump())
-        return await self.repo.update(existing, **payload.model_dump())
+            record = await self.repo.create(platform=platform, **payload.model_dump())
+        else:
+            record = await self.repo.update(existing, **payload.model_dump())
+        await self.session.commit()
+        return record
 
     async def get(self, platform: AppPlatform) -> AppVersion:
         record = await self.repo.get_by_platform(platform)
