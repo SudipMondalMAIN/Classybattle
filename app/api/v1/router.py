@@ -7,6 +7,7 @@ from app.api.v1.achievement_routes import router as achievement_router
 from app.api.v1.admin_dashboard_routes import router as admin_dashboard_router
 from app.api.v1.admin_user_routes import router as admin_user_router
 from app.api.v1.anti_cheat_routes import router as anti_cheat_router
+from app.api.v1.app_version_routes import router as app_version_router
 from app.api.v1.security_routes import router as security_router
 from app.api.v1.auth_routes import router as auth_router
 from app.api.v1.game_mode_routes import router as game_mode_router
@@ -61,3 +62,4 @@ api_v1_router.include_router(admin_dashboard_router)
 api_v1_router.include_router(admin_user_router)
 api_v1_router.include_router(security_router)
 api_v1_router.include_router(anti_cheat_router)
+api_v1_router.include_router(app_version_router)

@@ -3,6 +3,7 @@ Import every model here so Alembic's autogenerate can discover them
 via Base.metadata.
 """
 from app.database.base import Base
+from app.models.app_version import AppPlatform, AppVersion
 from app.models.achievement import (
     Achievement,
     AchievementComparison,
@@ -138,6 +139,8 @@ from app.models.wallet_transaction import (
 
 __all__ = [
     "Base",
+    "AppVersion",
+    "AppPlatform",
     "User",
     "OTP",
     "RefreshToken",
