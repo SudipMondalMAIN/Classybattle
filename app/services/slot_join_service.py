@@ -30,6 +30,7 @@ from app.models.tournament_participant import (
     TournamentParticipant,
 )
 from app.models.tournament_team import TournamentTeam, TournamentTeamMember, TournamentTeamStatus
+from app.models.team import generate_team_name
 from app.models.user import User
 from app.repositories.base import BaseRepository
 from app.repositories.tournament_participant_repository import TournamentParticipantRepository
@@ -170,6 +171,7 @@ class SlotJoinService:
                 await self._assert_team_slot_has_room(tournament, team_size)
                 tournament_team = await self.tournament_team_repo.create(
                     tournament_id=tournament.id,
+                    team_name=generate_team_name(),
                     captain_id=current_user.id,
                     team_format=resolved_format,
                     team_size=team_size,
@@ -181,6 +183,7 @@ class SlotJoinService:
             await self._assert_team_slot_has_room(tournament, team_size)
             tournament_team = await self.tournament_team_repo.create(
                 tournament_id=tournament.id,
+                team_name=generate_team_name(),
                 captain_id=current_user.id,
                 team_format=resolved_format,
                 team_size=team_size,
