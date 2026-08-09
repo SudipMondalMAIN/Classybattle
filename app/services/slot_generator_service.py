@@ -159,6 +159,8 @@ class SlotGeneratorService:
                 game_id=template.game_id,
                 mode_id=template.mode_id,
                 map_id=template.map_id,
+                banner_url=template.banner_url,
+                cover_url=template.cover_url,
                 organizer=template.organizer,
                 entry_fee=template.entry_fee,
                 prize_pool=template.prize_pool,

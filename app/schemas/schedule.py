@@ -33,6 +33,8 @@ class ScheduleCreate(BaseModel):
     entry_fee: Decimal = Field(default=Decimal("0"), ge=0)
     prize_pool: Decimal = Field(default=Decimal("0"), ge=0)
     max_players_per_slot: int = Field(..., gt=0, le=1000)
+    banner_url: Optional[str] = Field(default=None, description="Copied onto every generated slot's banner_url")
+    cover_url: Optional[str] = Field(default=None, description="Copied onto every generated slot's cover_url")
     daily_slot_times: list[str] = Field(
         ..., description="One '24h HH:MM' string per match generated each day, e.g. ['10:00','10:30',...]. Count = matches/day (default 27, but any number works)."
     )
@@ -67,6 +69,8 @@ class ScheduleUpdate(BaseModel):
     prize_pool: Optional[Decimal] = Field(None, ge=0)
     max_players: Optional[int] = Field(None, gt=0, le=1000)
     squad_size: Optional[int] = Field(None, gt=1, le=10)
+    banner_url: Optional[str] = Field(default=None, description="Copied onto every future generated slot's banner_url")
+    cover_url: Optional[str] = Field(default=None, description="Copied onto every future generated slot's cover_url")
     daily_slot_times: Optional[list[str]] = Field(
         None, description="Replaces the full list — admin can add/remove/edit match times/count here (e.g. 27 -> 28)."
     )
@@ -90,6 +94,8 @@ class ScheduleRead(BaseModel):
     entry_fee: Decimal
     prize_pool: Decimal
     max_players: int
+    banner_url: Optional[str] = None
+    cover_url: Optional[str] = None
     daily_slot_times: Optional[list[str]] = None
     matches_per_day: int = 0
     last_generated_on: Optional[datetime] = None

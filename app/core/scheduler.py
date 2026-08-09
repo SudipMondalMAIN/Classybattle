@@ -1,94 +1,111 @@
 """
 Slot Auto-Generation Scheduler.
 
-Runs a lightweight background job (via APScheduler's AsyncIOScheduler)
+Runs two lightweight background jobs (via APScheduler's AsyncIOScheduler)
 inside the same event loop as the FastAPI app — no separate cron/worker
-process needed. Every SLOT_SCHEDULER_INTERVAL_MINUTES (default 10), for
-every active recurring schedule (`Tournament.is_recurring_schedule=True`):
+process needed.
 
-- If today (IST) has no slots generated yet at all (brand-new schedule,
-  or the app was down at midnight), it bootstraps the full day once.
-- Otherwise, it does NOT touch today or regenerate anything in bulk. It
-  only looks at today's slots whose match has already finished (played
-  out / COMPLETED, CANCELLED, or scheduled_end has passed) and creates
-  *that same slot* for tomorrow — one match at a time, and only once
-  per slot (skipped if tomorrow's slot already exists). So e.g. after
-  today's 2:00 PM match is done, tomorrow's 2:00 PM slot gets created;
-  the other 26 slots for tomorrow are left alone until their own
-  today's match finishes.
+1. `_auto_complete_live_tournaments` — every LIVE_AUTO_COMPLETE_INTERVAL_
+   MINUTES (default 10). Unrelated to the daily rollover below: this just
+   flips a tournament LIVE -> COMPLETED once its room has been published
+   for 40+ minutes (`auto_complete_at` passed). Kept frequent because it's
+   about a single live room ending promptly, not about the daily slot
+   calendar.
+
+2. `_daily_slot_rollover` — once a day, at 01:00 IST. For every active
+   recurring schedule (`Tournament.is_recurring_schedule=True`):
+     a. Archives *yesterday's* (IST) generated slots: any that are still
+        SCHEDULED or LIVE (i.e. never got played/completed) are force-
+        flipped to COMPLETED. This is deliberate — a slot whose date has
+        passed is done, played or not. It stays in the DB and remains
+        visible to admins via match history, it just drops out of the
+        public "active tournaments" listing.
+     b. Generates the full set of today's slots in one shot (idempotent —
+        a day that's already generated is skipped, so re-running this on
+        every app startup is safe).
+   Also runs once immediately on startup, so a restart that missed the
+   01:00 IST tick (app was down, redeploy, etc.) self-heals on boot.
 """
 from datetime import datetime, timedelta, timezone
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
 
 from app.core.logging import get_logger
 from app.database.session import AsyncSessionLocal
+from app.models.tournament import TournamentStatus
 from app.repositories.tournament_repository import TournamentRepository
 from app.services.slot_generator_service import IST, SlotGeneratorService
 from app.services.tournament_service import TournamentService
 
 logger = get_logger("slot_scheduler")
 
-SLOT_SCHEDULER_INTERVAL_MINUTES = 10
+LIVE_AUTO_COMPLETE_INTERVAL_MINUTES = 10
 
 _scheduler: AsyncIOScheduler | None = None
 
 
-async def _generate_upcoming_slots() -> None:
-    """One tick, per active recurring schedule: bootstrap today if it has
-    no slots yet, otherwise top up tomorrow one slot at a time for
-    whichever of today's matches have already finished. Any failure is
-    logged and swallowed so a single bad schedule can't stop the whole
-    tick (or crash the scheduler)."""
-    today = datetime.now(IST).date()
-    # Explicit UTC bounds for "today (IST)" — matches list_for_tournament_on_date's
-    # naive func.date(scheduled_start) comparison for slots between IST
-    # 05:30 and 23:59, but is also correct for the 00:00-05:29 IST slots
-    # that func.date() would otherwise place on the previous UTC day.
-    today_start_utc = datetime.combine(today, datetime.min.time(), tzinfo=IST).astimezone(
-        timezone.utc
-    )
-    today_end_utc = today_start_utc + timedelta(days=1)
-
+async def _auto_complete_live_tournaments() -> None:
+    """Frequent tick: flips LIVE tournaments whose auto_complete_at has
+    passed (room published 40+ minutes ago) to COMPLETED. Independent of
+    the daily slot rollover below."""
     async with AsyncSessionLocal() as session:
         try:
             tournament_service = TournamentService(session)
             completed_count = await tournament_service.auto_complete_due_tournaments()
             if completed_count:
-                logger.info("slot_auto_complete", tournaments=completed_count)
+                logger.info("live_auto_complete", tournaments=completed_count)
         except Exception:  # noqa: BLE001 - never let the scheduler die
-            logger.exception("slot_auto_complete_failed")
+            logger.exception("live_auto_complete_failed")
             await session.rollback()
+
+
+async def _daily_slot_rollover() -> None:
+    """Runs once a day at 01:00 IST (and once on startup as a safety net).
+
+    Archives yesterday's (IST) generated slots — win, lose, played or
+    never touched, a slot whose day has passed is done — then generates
+    today's full slot list per active recurring schedule. Any failure is
+    logged and swallowed so a single bad schedule can't crash the
+    scheduler.
+    """
+    today = datetime.now(IST).date()
+    yesterday = today - timedelta(days=1)
 
     async with AsyncSessionLocal() as session:
         try:
-            generator = SlotGeneratorService(session)
             tournament_repo = TournamentRepository(session)
+            generator = SlotGeneratorService(session)
             schedules = await tournament_repo.list_active_recurring_schedules()
 
             for schedule in schedules:
-                todays_matches = await tournament_repo.list_generated_slots_for_template(
-                    schedule.slug, today.isoformat()
+                stale_slots = await tournament_repo.list_generated_slots_for_template(
+                    schedule.slug, yesterday.isoformat()
                 )
-                if not todays_matches:
-                    created = await generator.generate_for_day(schedule, today)
+                archived = 0
+                for slot in stale_slots:
+                    if slot.status in (TournamentStatus.COMPLETED, TournamentStatus.CANCELLED):
+                        continue
+                    await tournament_repo.update(slot, status=TournamentStatus.COMPLETED)
+                    archived += 1
+                if archived:
                     logger.info(
-                        "slot_bootstrap_today",
+                        "daily_slot_archive",
                         tournament_id=str(schedule.id),
-                        matches=len(created),
+                        archived=archived,
                     )
-                    continue
 
-                created = await generator.top_up_completed_slots_for_next_day(schedule)
+                created = await generator.generate_for_day(schedule, today)
                 if created:
                     logger.info(
-                        "slot_next_day_topup",
+                        "daily_slot_generate",
                         tournament_id=str(schedule.id),
                         matches=len(created),
-                        slots=[m.scheduled_start.isoformat() for m in created],
                     )
+
+            await session.commit()
         except Exception:  # noqa: BLE001 - never let the scheduler die
-            logger.exception("slot_auto_generate_failed")
+            logger.exception("daily_slot_rollover_failed")
             await session.rollback()
 
 
@@ -100,16 +117,29 @@ def start_slot_scheduler() -> None:
 
     _scheduler = AsyncIOScheduler(timezone="UTC")
     _scheduler.add_job(
-        _generate_upcoming_slots,
+        _auto_complete_live_tournaments,
         "interval",
-        minutes=SLOT_SCHEDULER_INTERVAL_MINUTES,
-        id="slot_auto_generate",
+        minutes=LIVE_AUTO_COMPLETE_INTERVAL_MINUTES,
+        id="live_auto_complete",
         next_run_time=datetime.now(timezone.utc),  # also run once immediately on startup
         coalesce=True,
         max_instances=1,
     )
+    _scheduler.add_job(
+        _daily_slot_rollover,
+        CronTrigger(hour=1, minute=0, timezone=IST),
+        id="daily_slot_rollover",
+        next_run_time=datetime.now(timezone.utc),  # also run once immediately on startup
+        coalesce=True,
+        max_instances=1,
+        misfire_grace_time=3600,
+    )
     _scheduler.start()
-    logger.info("slot_scheduler_started", interval_minutes=SLOT_SCHEDULER_INTERVAL_MINUTES)
+    logger.info(
+        "slot_scheduler_started",
+        live_auto_complete_interval_minutes=LIVE_AUTO_COMPLETE_INTERVAL_MINUTES,
+        daily_rollover="01:00 IST",
+    )
 
 
 def stop_slot_scheduler() -> None:

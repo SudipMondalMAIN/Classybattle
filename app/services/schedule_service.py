@@ -98,6 +98,8 @@ class ScheduleService:
             entry_fee=payload.entry_fee,
             prize_pool=payload.prize_pool,
             max_players=payload.max_players_per_slot,
+            banner_url=payload.banner_url,
+            cover_url=payload.cover_url,
             daily_slot_times=sorted(set(payload.daily_slot_times)),
             created_by=current_user.id,
             # Derived from category so generated matches never end up
