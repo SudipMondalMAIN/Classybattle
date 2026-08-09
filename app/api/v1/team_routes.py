@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_db_session
-from app.dependencies.auth import get_current_active_verified_user, require_admin
+from app.dependencies.auth import get_current_active_verified_user, require_admin, require_can_play
 from app.models.team import TeamStatus
 from app.models.user import User
 from app.schemas.team import (
@@ -44,7 +44,7 @@ router = APIRouter(tags=["Team System"])
 async def create_team(
     tournament_id: UUID,
     payload: TeamCreate,
-    current_user: User = Depends(get_current_active_verified_user),
+    current_user: User = Depends(require_can_play),
     session: AsyncSession = Depends(get_db_session),
 ):
     service = TeamService(session)
@@ -59,7 +59,7 @@ async def create_team(
 async def join_team(
     tournament_id: UUID,
     payload: TeamJoin,
-    current_user: User = Depends(get_current_active_verified_user),
+    current_user: User = Depends(require_can_play),
     session: AsyncSession = Depends(get_db_session),
 ):
     service = TeamService(session)

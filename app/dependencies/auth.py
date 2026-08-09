@@ -69,6 +69,57 @@ async def get_current_active_verified_user(
     return current_user
 
 
+async def get_current_enforced_user(
+    current_user: User = Depends(get_current_active_verified_user),
+    session: AsyncSession = Depends(get_db_session),
+) -> User:
+    """Same as get_current_active_verified_user, but first lazily lifts
+    any suspension/time-boxed ban whose duration has already expired, so
+    `current_user.status` reflects reality even though nothing sweeps
+    expired moderation actions in the background. Use this (instead of
+    get_current_active_verified_user) as the base for any endpoint that
+    needs to check suspension/ban status."""
+    from app.services.moderation_service import ModerationService
+
+    return await ModerationService(session).refresh_enforcement_status(current_user)
+
+
+async def require_not_banned(
+    current_user: User = Depends(get_current_enforced_user),
+) -> User:
+    """Blocks BANNED users. A banned user can still log in and can still
+    submit/track appeals, but every other write action (deposits,
+    withdrawals, joining tournaments) is off-limits."""
+    from app.models.user import UserStatus
+
+    if current_user.status == UserStatus.BANNED:
+        raise ForbiddenException(
+            "Your account has been banned. You can submit an appeal from your notifications/reports page."
+        )
+    return current_user
+
+
+async def require_can_play(
+    current_user: User = Depends(get_current_enforced_user),
+) -> User:
+    """Blocks BANNED users (see require_not_banned) and, additionally,
+    SUSPENDED users -- suspension only restricts tournament participation;
+    a suspended user can still log in, deposit, and withdraw. Once the
+    suspension's duration has elapsed this dependency automatically lets
+    them through again (via get_current_enforced_user's lazy refresh)."""
+    from app.models.user import UserStatus
+
+    if current_user.status == UserStatus.BANNED:
+        raise ForbiddenException(
+            "Your account has been banned. You can submit an appeal from your notifications/reports page."
+        )
+    if current_user.status == UserStatus.SUSPENDED:
+        raise ForbiddenException(
+            "Your account is suspended and you can't join or play tournaments until the suspension ends."
+        )
+    return current_user
+
+
 class RequireRole:
     """Dependency factory enforcing that the current user has one of the given roles."""
 

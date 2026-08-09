@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import ValidationException
 from app.database.session import get_db_session
-from app.dependencies.auth import get_current_active_verified_user, require_admin
+from app.dependencies.auth import get_current_active_verified_user, require_admin, require_not_banned
 from app.models.payment import PaymentProvider, PaymentRequestStatus
 from app.models.user import User
 from app.schemas.payment import (
@@ -77,7 +77,7 @@ async def submit_deposit(
     amount: str = Query(..., description="Deposit amount, e.g. 500.00"),
     utr_number: str = Query(..., min_length=1, max_length=64),
     screenshot: UploadFile = File(...),
-    current_user: User = Depends(get_current_active_verified_user),
+    current_user: User = Depends(require_not_banned),
     session: AsyncSession = Depends(get_db_session),
 ):
     from decimal import Decimal, InvalidOperation

@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_db_session
-from app.dependencies.auth import get_current_active_verified_user, require_admin
+from app.dependencies.auth import get_current_active_verified_user, require_admin, require_can_play
 from app.models.participant import ParticipantStatus
 from app.models.user import User
 from app.schemas.participant import (
@@ -41,7 +41,7 @@ async def register_for_tournament(
     tournament_id: UUID,
     payload: ParticipantRegister,
     idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key"),
-    current_user: User = Depends(get_current_active_verified_user),
+    current_user: User = Depends(require_can_play),
     session: AsyncSession = Depends(get_db_session),
 ):
     service = ParticipantService(session)

@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundException, ValidationException
 from app.database.session import get_db_session
-from app.dependencies.auth import get_current_active_verified_user
+from app.dependencies.auth import get_current_active_verified_user, require_can_play
 from app.models.game_profile import UserGameProfile
 from app.models.user import User
 from app.repositories.game_repository import UserGameProfileRepository
@@ -63,7 +63,7 @@ async def _resolve_game_profile(
 async def join_slot_solo(
     tournament_id: UUID,
     payload: SlotJoinSoloRequest,
-    current_user: User = Depends(get_current_active_verified_user),
+    current_user: User = Depends(require_can_play),
     session: AsyncSession = Depends(get_db_session),
 ):
     """Join a Classic/Battle-Royale style slot (Free Fire Classic, BGMI
@@ -84,7 +84,7 @@ async def join_slot_solo(
 async def join_slot_team(
     tournament_id: UUID,
     payload: SlotJoinTeamRequest,
-    current_user: User = Depends(get_current_active_verified_user),
+    current_user: User = Depends(require_can_play),
     session: AsyncSession = Depends(get_db_session),
 ):
     """Join a Clash-Squad style slot (1v1/2v2/3v3/4v4) -- create a team

@@ -314,6 +314,46 @@ class ModerationService:
             await self.session.commit()
         return count
 
+    async def refresh_enforcement_status(self, user: User) -> User:
+        """Lazily lifts a suspension/time-boxed ban once its `expires_at`
+        has passed, instead of relying on a periodic sweep (there is no
+        scheduler wired up for `expire_due_actions` in this project, so
+        without this a SUSPENDED user's status would never flip back to
+        ACTIVE on its own). Called on every request that needs an
+        up-to-date enforcement status, e.g. before gating tournament
+        joins, deposits, or withdrawals."""
+        if user.status == UserStatus.ACTIVE:
+            return user
+
+        active = await self.action_repo.list_active_for_user(user.id)
+        now = datetime.now(timezone.utc)
+        still_active = []
+        for action in active:
+            if action.expires_at is not None and action.expires_at <= now:
+                await self.action_repo.update(action, status=ModerationActionStatus.EXPIRED)
+            else:
+                still_active.append(action)
+
+        if len(still_active) == len(active):
+            # Nothing changed.
+            return user
+
+        await self.session.commit()
+
+        if not still_active:
+            user = await self.user_repo.update(user, status=UserStatus.ACTIVE)
+        else:
+            # Still under enforcement -- reflect the most severe remaining
+            # action type (a BAN outranks a SUSPENSION if both were active).
+            new_status = UserStatus.BANNED if any(
+                a.action_type == ModerationActionType.BAN for a in still_active
+            ) else UserStatus.SUSPENDED
+            if user.status != new_status:
+                user = await self.user_repo.update(user, status=new_status)
+
+        await self.session.refresh(user)
+        return user
+
     # ------------------------------------------------------------------
     # Appeals
     # ------------------------------------------------------------------

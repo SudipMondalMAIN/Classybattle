@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_db_session
-from app.dependencies.auth import get_current_active_verified_user, require_admin
+from app.dependencies.auth import get_current_active_verified_user, require_admin, require_not_banned
 from app.models.user import User
 from app.models.withdrawal import WithdrawalStatus
 from app.schemas.withdrawal import (
@@ -36,7 +36,7 @@ router = APIRouter(tags=["Withdrawals"])
 @router.post("/withdrawals", response_model=WithdrawalRequestRead, status_code=201)
 async def request_withdrawal(
     payload: WithdrawalRequestCreate,
-    current_user: User = Depends(get_current_active_verified_user),
+    current_user: User = Depends(require_not_banned),
     session: AsyncSession = Depends(get_db_session),
 ):
     service = WithdrawalService(session)
