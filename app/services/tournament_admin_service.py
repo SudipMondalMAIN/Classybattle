@@ -185,7 +185,7 @@ class TournamentAdminService:
             user,
             amount=amount,
             reference_type=_WALLET_WINNING_REF_TYPE,
-            reference_id=str(tournament_id),
+            reference_id=f"{tournament_id}:{user_id}",
             description=note or f"Winning amount for tournament {tournament_id}",
             commit=False,
         )
