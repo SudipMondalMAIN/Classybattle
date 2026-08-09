@@ -160,6 +160,7 @@ class TournamentParticipant(BaseModel):
     # ------------------------------------------------------------------
     kills: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     is_winner: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
+    rank: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
     winning_amount: Mapped[Optional[Decimal]] = mapped_column(
         Numeric(12, 2), nullable=True
     )

@@ -45,7 +45,11 @@ async def declare_player_result(
 ):
     service = TournamentAdminService(session)
     return await service.declare_result(
-        tournament_id, user_id, kills=payload.kills, is_winner=payload.is_winner
+        tournament_id,
+        user_id,
+        kills=payload.kills,
+        is_winner=payload.is_winner,
+        rank=payload.rank,
     )
 
 

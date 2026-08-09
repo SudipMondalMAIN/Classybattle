@@ -63,6 +63,7 @@ class TournamentAdminService:
                         team_id=None,
                         kills=slot.kills,
                         is_winner=slot.is_winner,
+                        rank=slot.rank,
                         winning_amount=slot.winning_amount,
                         winning_paid_at=slot.winning_paid_at,
                         joined_at=slot.created_at,
@@ -84,6 +85,7 @@ class TournamentAdminService:
                             team_id=slot.tournament_team.id,
                             kills=member.kills,
                             is_winner=member.is_winner,
+                            rank=member.rank,
                             winning_amount=member.winning_amount,
                             winning_paid_at=member.winning_paid_at,
                             joined_at=member.created_at,
@@ -123,7 +125,13 @@ class TournamentAdminService:
         raise NotFoundException("This user did not join this tournament")
 
     async def declare_result(
-        self, tournament_id: UUID, user_id: UUID, *, kills: Optional[int], is_winner: Optional[bool]
+        self,
+        tournament_id: UUID,
+        user_id: UUID,
+        *,
+        kills: Optional[int],
+        is_winner: Optional[bool],
+        rank: Optional[int] = None,
     ):
         kind, row = await self._find_player_slot(tournament_id, user_id)
         update_data = {}
@@ -131,6 +139,15 @@ class TournamentAdminService:
             update_data["kills"] = kills
         if is_winner is not None:
             update_data["is_winner"] = is_winner
+            # Clearing winner status also clears any rank it had.
+            if is_winner is False and rank is None:
+                update_data["rank"] = None
+        if rank is not None:
+            if rank < 1:
+                raise ValidationException("Rank must be 1 or greater")
+            update_data["rank"] = rank
+            # Setting a rank implicitly marks the player as a winner.
+            update_data.setdefault("is_winner", True)
         if not update_data:
             return row
 
