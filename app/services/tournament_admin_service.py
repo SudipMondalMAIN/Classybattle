@@ -20,7 +20,7 @@ from app.models.user import User
 from app.repositories.game_repository import GameRepository, UserGameProfileRepository
 from app.repositories.tournament_participant_repository import TournamentParticipantRepository
 from app.repositories.tournament_repository import TournamentRepository
-from app.schemas.tournament_admin import MatchAdminDetailRead, MatchAdminPlayerRead
+from app.schemas.tournament_admin import MatchAdminDetailRead, MatchAdminPlayerRead, PlayerActionRead
 from app.services.wallet_service import WalletService
 
 _WALLET_WINNING_REF_TYPE = "tournament_winning_payout"
@@ -148,21 +148,27 @@ class TournamentAdminService:
             update_data["rank"] = rank
             # Setting a rank implicitly marks the player as a winner.
             update_data.setdefault("is_winner", True)
-        if not update_data:
-            return row
+        if update_data:
+            if kind == "solo":
+                row = await self.slot_repo.update(row, **update_data)
+            else:
+                from app.repositories.base import BaseRepository
+                from app.models.tournament_team import TournamentTeamMember
 
-        if kind == "solo":
-            row = await self.slot_repo.update(row, **update_data)
-        else:
-            from app.repositories.base import BaseRepository
-            from app.models.tournament_team import TournamentTeamMember
+                repo = BaseRepository(self.session, TournamentTeamMember)
+                row = await repo.update(row, **update_data)
 
-            repo = BaseRepository(self.session, TournamentTeamMember)
-            row = await repo.update(row, **update_data)
+            await self.session.commit()
+            await self.session.refresh(row)
 
-        await self.session.commit()
-        await self.session.refresh(row)
-        return row
+        return PlayerActionRead(
+            user_id=user_id,
+            kills=row.kills,
+            is_winner=row.is_winner,
+            rank=row.rank,
+            winning_amount=row.winning_amount,
+            winning_paid_at=row.winning_paid_at,
+        )
 
     async def pay_winner(
         self, tournament_id: UUID, user_id: UUID, *, amount: Decimal, note: Optional[str], current_user: User
@@ -204,4 +210,11 @@ class TournamentAdminService:
 
         await self.session.commit()
         await self.session.refresh(row)
-        return row
+        return PlayerActionRead(
+            user_id=user_id,
+            kills=row.kills,
+            is_winner=row.is_winner,
+            rank=row.rank,
+            winning_amount=row.winning_amount,
+            winning_paid_at=row.winning_paid_at,
+        )

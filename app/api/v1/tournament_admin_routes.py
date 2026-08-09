@@ -19,6 +19,7 @@ from app.schemas.tournament_admin import (
     DeclareResultRequest,
     MatchAdminDetailRead,
     PayWinnerRequest,
+    PlayerActionRead,
 )
 from app.services.tournament_admin_service import TournamentAdminService
 
@@ -35,7 +36,7 @@ async def get_tournament_admin_details(
     return await service.get_tournament_details(tournament_id)
 
 
-@router.post("/players/{user_id}/result")
+@router.post("/players/{user_id}/result", response_model=PlayerActionRead)
 async def declare_player_result(
     tournament_id: UUID,
     user_id: UUID,
@@ -53,7 +54,7 @@ async def declare_player_result(
     )
 
 
-@router.post("/players/{user_id}/pay")
+@router.post("/players/{user_id}/pay", response_model=PlayerActionRead)
 async def pay_tournament_winner(
     tournament_id: UUID,
     user_id: UUID,

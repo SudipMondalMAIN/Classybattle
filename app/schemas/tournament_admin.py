@@ -54,3 +54,12 @@ class DeclareResultRequest(BaseModel):
 class PayWinnerRequest(BaseModel):
     amount: Decimal
     note: Optional[str] = None
+
+
+class PlayerActionRead(BaseModel):
+    user_id: UUID
+    kills: int = 0
+    is_winner: bool = False
+    rank: Optional[int] = None
+    winning_amount: Optional[Decimal] = None
+    winning_paid_at: Optional[datetime] = None
