@@ -14,9 +14,11 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundException, ValidationException
+from app.models.notification import NotificationEventType
 from app.models.tournament import Tournament
 from app.models.tournament_participant import TournamentParticipant
 from app.models.user import User
+from app.notifications.dispatch_service import NotificationDispatchService
 from app.repositories.game_repository import GameRepository, UserGameProfileRepository
 from app.repositories.tournament_participant_repository import TournamentParticipantRepository
 from app.repositories.tournament_repository import TournamentRepository
@@ -161,6 +163,31 @@ class TournamentAdminService:
             await self.session.commit()
             await self.session.refresh(row)
 
+            # Newly marked a winner -> let the player know right away,
+            # otherwise they have no way of finding out they won.
+            if update_data.get("is_winner") is True:
+                from app.repositories.user_repository import UserRepository
+
+                user = await UserRepository(self.session).get_by_id(user_id)
+                if user is not None:
+                    tournament, _game = await self._get_tournament_and_game(tournament_id)
+                    rank_txt = f" (Rank #{row.rank})" if row.rank else ""
+                    try:
+                        await NotificationDispatchService(self.session).dispatch(
+                            user=user,
+                            event_type=NotificationEventType.WINNER_DECLARED,
+                            title="You won! 🏆",
+                            body=(
+                                f"Congratulations! You've been declared a winner{rank_txt} "
+                                f"in {tournament.title}. Your prize will be credited to your "
+                                f"wallet shortly."
+                            ),
+                            event_key=f"winner_declared:{tournament_id}:{user_id}",
+                            send_email=False,
+                        )
+                    except Exception:  # noqa: BLE001 - never block result declaration
+                        pass
+
         return PlayerActionRead(
             user_id=user_id,
             kills=row.kills,
@@ -210,6 +237,23 @@ class TournamentAdminService:
 
         await self.session.commit()
         await self.session.refresh(row)
+
+        tournament, _game = await self._get_tournament_and_game(tournament_id)
+        try:
+            await NotificationDispatchService(self.session).dispatch(
+                user=user,
+                event_type=NotificationEventType.PRIZE_DISTRIBUTED,
+                title="Prize credited 💰",
+                body=(
+                    f"₹{amount} has been credited to your wallet as your winning prize "
+                    f"for {tournament.title}."
+                ),
+                event_key=f"prize_distributed:{tournament_id}:{user_id}",
+                send_email=False,
+            )
+        except Exception:  # noqa: BLE001 - never block the payout itself
+            pass
+
         return PlayerActionRead(
             user_id=user_id,
             kills=row.kills,
