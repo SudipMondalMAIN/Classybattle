@@ -1,19 +1,19 @@
 """
 Predefined avatar catalogue. Users select an avatar_id from this fixed
 list instead of uploading a custom profile photo.
+
+Must stay in sync with:
+- assets/avatars/avatar_1.png ... avatar_6.png in the Flutter app
+- VALID_AVATAR_IDS in app/schemas/user.py
 """
 
 PREDEFINED_AVATARS: list[str] = [
-    "avatar_01",
-    "avatar_02",
-    "avatar_03",
-    "avatar_04",
-    "avatar_05",
-    "avatar_06",
-    "avatar_07",
-    "avatar_08",
-    "avatar_09",
-    "avatar_10",
+    "avatar_1",
+    "avatar_2",
+    "avatar_3",
+    "avatar_4",
+    "avatar_5",
+    "avatar_6",
 ]
 
 
