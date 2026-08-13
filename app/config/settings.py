@@ -37,7 +37,12 @@ class Settings(BaseSettings):
     JWT_SECRET_KEY: str
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
-    REFRESH_TOKEN_EXPIRE_DAYS: int = 30
+    # The Flutter app auto-refreshes the access token in the background
+    # on every 401 (see ApiClient's refresh interceptor), so this only
+    # matters as the "how long can a user go without opening the app
+    # before being asked to log in again" window. Set long so a user
+    # effectively stays logged in until they tap Logout.
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 365
 
     # ---------------- OTP ----------------
     OTP_LENGTH: int = 6
