@@ -134,11 +134,15 @@ class SecurityService:
                         f"{FAILED_LOGIN_WINDOW_MINUTES} minutes",
                         ip_address=ip_address,
                     )
-                    await self.lock_account(
-                        user_id=user.id,
-                        reason="Automatic lock: too many failed login attempts",
-                        locked_by=None,
-                    )
+                    # Auto-lock on repeated failed logins disabled per
+                    # request -- the event above still gets logged for
+                    # admins to review, it just no longer locks the
+                    # account on its own.
+                    # await self.lock_account(
+                    #     user_id=user.id,
+                    #     reason="Automatic lock: too many failed login attempts",
+                    #     locked_by=None,
+                    # )
 
         await self.session.commit()
         return entry
@@ -158,9 +162,12 @@ class SecurityService:
                 severity=SecurityEventSeverity.HIGH,
                 description=f"Risk score reached {new_score}, auto-locking account",
             )
-            await self.lock_account(
-                user_id=user_id, reason=f"Automatic lock: risk score reached {new_score}", locked_by=None
-            )
+            # Auto-lock on risk score threshold disabled per request --
+            # the event above still gets logged for admins to review,
+            # it just no longer locks the account on its own.
+            # await self.lock_account(
+            #     user_id=user_id, reason=f"Automatic lock: risk score reached {new_score}", locked_by=None
+            # )
         return lock
 
     async def get_risk_profile(self, user_id: UUID) -> dict:
