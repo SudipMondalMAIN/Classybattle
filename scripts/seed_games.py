@@ -50,8 +50,14 @@ async def seed_games() -> None:
             if existing is None:
                 await repo.create(**game_data, icon_url=None, is_active=True)
                 print(f"Created game: {game_data['name']}")
+            elif not existing.profile_schema:
+                # Game row already exists but was created before profile_schema
+                # was populated (or created with an empty one) -- backfill it so
+                # the app can render the nickname/UID fields.
+                await repo.update(existing, profile_schema=game_data["profile_schema"])
+                print(f"Backfilled profile_schema for: {game_data['name']}")
             else:
-                print(f"Game already exists: {game_data['name']}")
+                print(f"Game already exists (schema OK): {game_data['name']}")
         await session.commit()
 
 
