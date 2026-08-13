@@ -467,6 +467,10 @@ class PrizeService:
                 title="Prize distributed",
                 body=f"Your prize of ₹{payout.amount} for rank {payout.rank} has been credited to your wallet.",
                 event_key=f"prize_distributed:{payout.id}",
+                meta_data={
+                    "tournament_id": str(payout.tournament_id),
+                    "transaction_id": str(txn.id),
+                },
             )
         except Exception:  # noqa: BLE001
             pass

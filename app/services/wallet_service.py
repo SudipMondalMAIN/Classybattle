@@ -258,6 +258,7 @@ class WalletService:
                     body=f"₹{amount} has been credited to your wallet."
                     + (f" ({description})" if description else ""),
                     event_key=f"wallet_credited:{txn.id}",
+                    meta_data={"transaction_id": str(txn.id)},
                 )
             except Exception:  # noqa: BLE001
                 pass
@@ -315,6 +316,7 @@ class WalletService:
                     body=f"₹{amount} has been debited from your wallet."
                     + (f" ({description})" if description else ""),
                     event_key=f"wallet_debited:{txn.id}",
+                    meta_data={"transaction_id": str(txn.id)},
                 )
             except Exception:  # noqa: BLE001
                 pass
@@ -448,6 +450,7 @@ class WalletService:
                     body=f"₹{amount} has been refunded to your wallet."
                     + (f" ({description})" if description else ""),
                     event_key=f"refund_completed:{txn.id}",
+                    meta_data={"transaction_id": str(txn.id)},
                 )
             except Exception:  # noqa: BLE001
                 pass

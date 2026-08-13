@@ -184,6 +184,7 @@ class TournamentAdminService:
                             ),
                             event_key=f"winner_declared:{tournament_id}:{user_id}",
                             send_email=False,
+                            meta_data={"tournament_id": str(tournament_id)},
                         )
                     except Exception:  # noqa: BLE001 - never block result declaration
                         pass
@@ -250,6 +251,7 @@ class TournamentAdminService:
                 ),
                 event_key=f"prize_distributed:{tournament_id}:{user_id}",
                 send_email=False,
+                meta_data={"tournament_id": str(tournament_id)},
             )
         except Exception:  # noqa: BLE001 - never block the payout itself
             pass

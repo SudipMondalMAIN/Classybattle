@@ -64,6 +64,7 @@ class TournamentService:
                 title=title,
                 body=body,
                 event_key_prefix=event_key_prefix,
+                meta_data={"tournament_id": str(tournament.id)},
             )
         except Exception:  # noqa: BLE001 - notifications must never break tournament flows
             pass
@@ -211,6 +212,7 @@ class TournamentService:
                 title="Tournament created",
                 body=f"Your tournament '{tournament.title}' has been created successfully.",
                 event_key=f"tournament_created:{tournament.id}",
+                meta_data={"tournament_id": str(tournament.id)},
             )
         except Exception:  # noqa: BLE001
             pass
@@ -401,7 +403,7 @@ class TournamentService:
 
         await self._notify_participants(
             tournament,
-            event_type=NotificationEventType.TOURNAMENT_UPDATED,
+            event_type=NotificationEventType.ROOM_DETAILS_PUBLISHED,
             title="Room details published",
             body=f"Room ID and password for '{tournament.title}' are now available.",
             event_key_prefix=f"tournament_room_published:{tournament.id}",

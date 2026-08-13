@@ -388,6 +388,7 @@ class ParticipantService:
                 title="Registration successful",
                 body=f"You're registered for '{tournament.title}'. Good luck!",
                 event_key=f"registration_successful:{participant.id}:{participant.joined_at.isoformat()}",
+                meta_data={"tournament_id": str(tournament.id)},
             )
         except Exception:  # noqa: BLE001
             pass
@@ -467,6 +468,7 @@ class ParticipantService:
                 body=f"Your registration for '{tournament.title}' has been cancelled."
                 + (" Your entry fee was refunded." if was_paid else ""),
                 event_key=f"registration_cancelled:{participant.id}:{participant.cancelled_at.isoformat()}",
+                meta_data={"tournament_id": str(tournament.id)},
             )
         except Exception:  # noqa: BLE001
             pass
