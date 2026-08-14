@@ -200,10 +200,12 @@ async def update_tournament_status(
 async def publish_room(
     tournament_id: UUID,
     payload: TournamentPublishRoom,
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(get_current_active_verified_user),
     session: AsyncSession = Depends(get_db_session),
 ):
-    """Admin sets room_id/room_password -> tournament auto-flips to LIVE."""
+    """Admin OR the tournament's host (for user-hosted Custom Tournaments)
+    sets room_id/room_password -> tournament auto-flips to LIVE.
+    Permission is enforced in the service layer via _assert_can_manage."""
     service = TournamentService(session)
     tournament = await service.publish_room(
         tournament_id, payload.room_id, payload.room_password, current_user

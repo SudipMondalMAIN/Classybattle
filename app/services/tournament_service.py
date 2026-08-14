@@ -465,6 +465,13 @@ class TournamentService:
 
         tournament = await self.get_by_id(tournament_id)
         self._assert_can_manage(tournament, current_user)
+        if not self._is_admin(current_user) and tournament.category is not None:
+            # Non-admin hosts may only publish rooms for their own Custom
+            # Tournaments (category is None) -- admin/schedule tournaments
+            # must still be published by an admin.
+            raise ForbiddenException(
+                "Only an admin can publish room details for this tournament"
+            )
         self._assert_valid_status_transition(tournament.status, TournamentStatus.LIVE)
 
         now = datetime.now(timezone.utc)
