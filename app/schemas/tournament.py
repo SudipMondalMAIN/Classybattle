@@ -95,6 +95,66 @@ class TournamentCreate(BaseModel):
         )
 
 
+class TournamentCustomCreate(BaseModel):
+    """Payload for a regular (non-admin) user creating their own custom
+    tournament from the app's "Custom Tournament" flow. Deliberately much
+    smaller than TournamentCreate -- no admin-only fields (visibility,
+    is_featured, recurring-schedule config, etc). Host sets only the entry
+    fee and player count; prize_pool is always derived server-side as
+    entry_fee * max_players * (1 - PLATFORM_COMMISSION_RATE), never trusted
+    from the client.
+    """
+
+    title: str = Field(..., min_length=3, max_length=200)
+    description: Optional[str] = Field(None, max_length=5000)
+    rules: Optional[str] = Field(None, max_length=5000)
+    game_id: UUID
+    mode_id: Optional[UUID] = None
+    map_id: Optional[UUID] = None
+    entry_fee: Decimal = Field(..., gt=0, le=Decimal("100000"))
+    max_players: int = Field(..., ge=2, le=1000)
+    registration_mode: TeamRegistrationMode = TeamRegistrationMode.SOLO
+    team_size: int = Field(default=1, gt=0, le=100)
+    max_teams: Optional[int] = Field(None, gt=0)
+
+    @staticmethod
+    def _validate_team_size(registration_mode: TeamRegistrationMode, team_size: int) -> None:
+        if registration_mode == TeamRegistrationMode.SOLO and team_size != 1:
+            raise ValueError("team_size must be 1 when registration_mode is 'solo'")
+        if registration_mode != TeamRegistrationMode.SOLO and team_size < 2:
+            raise ValueError(
+                "team_size must be at least 2 for 'team_invite' or 'auto_random' modes"
+            )
+
+    @staticmethod
+    def _validate_capacity(
+        registration_mode: TeamRegistrationMode,
+        team_size: int,
+        max_players: int,
+        max_teams: Optional[int],
+    ) -> None:
+        if registration_mode == TeamRegistrationMode.SOLO:
+            return
+        if max_players < team_size:
+            raise ValueError(
+                f"max_players ({max_players}) must be at least team_size ({team_size})"
+            )
+        if max_players % team_size != 0:
+            raise ValueError(
+                f"max_players ({max_players}) must be a multiple of team_size ({team_size})"
+            )
+        if max_teams is not None and max_teams * team_size != max_players:
+            raise ValueError(
+                f"max_players ({max_players}) must equal max_teams * team_size"
+            )
+
+    def model_post_init(self, __context) -> None:
+        self._validate_team_size(self.registration_mode, self.team_size)
+        self._validate_capacity(
+            self.registration_mode, self.team_size, self.max_players, self.max_teams
+        )
+
+
 class TournamentUpdate(BaseModel):
     title: Optional[str] = Field(None, min_length=3, max_length=200)
     description: Optional[str] = Field(None, max_length=5000)
@@ -181,6 +241,7 @@ class TournamentListItem(BaseModel):
     slug: str
     game_id: UUID
     banner_url: Optional[str] = None
+    organizer: str
     entry_fee: Decimal
     prize_pool: Decimal
     max_players: int

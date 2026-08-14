@@ -22,6 +22,7 @@ from app.schemas.tournament import (
     PaginatedTournaments,
     TournamentAssetUploadResponse,
     TournamentCreate,
+    TournamentCustomCreate,
     TournamentListItem,
     TournamentPublishRoom,
     TournamentRead,
@@ -76,6 +77,20 @@ async def create_tournament(
 ):
     service = TournamentService(session)
     tournament = await service.create_tournament(payload, current_user)
+    return TournamentRead.model_validate(tournament)
+
+
+@router.post("/custom", response_model=TournamentRead, status_code=201)
+async def create_custom_tournament(
+    payload: TournamentCustomCreate,
+    current_user: User = Depends(get_current_active_verified_user),
+    session: AsyncSession = Depends(get_db_session),
+):
+    """Regular user "Custom Tournament" creation -- host sets entry fee &
+    player count, prize pool is auto-calculated, goes live immediately, no
+    admin approval needed."""
+    service = TournamentService(session)
+    tournament = await service.create_custom_tournament(payload, current_user)
     return TournamentRead.model_validate(tournament)
 
 

@@ -2,6 +2,7 @@
 Tournament service — validation, slug/status management, and orchestration
 between the repository layer and Supabase-backed asset storage.
 """
+from decimal import Decimal
 from typing import Optional, Union
 from uuid import UUID, uuid4
 
@@ -17,16 +18,18 @@ from app.models.tournament import (
     TOURNAMENT_STATUS_TRANSITIONS,
     Tournament,
     TournamentStatus,
+    TournamentVisibility,
 )
 from app.models.audit_log import AuditAction
 from app.models.user import User, UserRole
 from app.repositories.game_mode_repository import GameModeRepository
-from app.repositories.game_repository import GameRepository
+from app.repositories.game_repository import GameRepository, UserGameProfileRepository
 from app.repositories.map_repository import MapRepository
 from app.repositories.participant_repository import ParticipantRepository
 from app.repositories.tournament_repository import TournamentRepository
-from app.schemas.tournament import TournamentCreate, TournamentUpdate
+from app.schemas.tournament import TournamentCreate, TournamentCustomCreate, TournamentUpdate
 from app.services.audit_service import AuditService
+from app.services.slot_join_service import SlotJoinService
 from app.storage.storage_service import StorageService
 from app.utils.slug import generate_unique_suffix, slugify
 
@@ -35,6 +38,10 @@ _ALLOWED_IMAGE_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp"}
 _MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024  # 5 MB
 
 _MANAGER_ROLES = {UserRole.ADMIN, UserRole.SUPER_ADMIN}
+
+# Platform cut on user-created ("custom") tournaments. e.g. entry_fee=10,
+# max_players=2 -> pool=20 -> prize_pool=16.50 (platform keeps 3.50).
+PLATFORM_COMMISSION_RATE = Decimal("0.175")
 
 
 class TournamentService:
@@ -47,6 +54,7 @@ class TournamentService:
         self.storage = StorageService(bucket="tournament-assets")
         self.audit = AuditService(session)
         self.participant_repo = ParticipantRepository(session)
+        self.game_profile_repo = UserGameProfileRepository(session)
 
     async def _notify_participants(
         self, tournament: Tournament, *, event_type, title: str, body: str, event_key_prefix: str
@@ -216,6 +224,80 @@ class TournamentService:
             )
         except Exception:  # noqa: BLE001
             pass
+
+        return tournament
+
+    async def create_custom_tournament(
+        self, payload: TournamentCustomCreate, current_user: User
+    ) -> Tournament:
+        """User-facing "Custom Tournament" creation flow (the box on the
+        home screen). Any verified user can host one -- no admin approval,
+        goes straight to SCHEDULED/PUBLIC and is instantly joinable, same
+        as an admin-created tournament. prize_pool is always computed
+        server-side from entry_fee * max_players, never accepted from the
+        client, so a host cannot fake an inflated payout.
+
+        The host is auto-joined into their own tournament (solo mode only
+        -- squad/team custom tournaments still require the host to join
+        explicitly and invite/organize their team afterward). This debits
+        the host's wallet for the entry fee exactly like any other player,
+        so require a saved game profile *before* creating the tournament
+        row, to avoid creating an orphan tournament nobody is in.
+        """
+        await self._assert_game_exists(payload.game_id)
+        await self._assert_mode_and_map_valid(payload.game_id, payload.mode_id, payload.map_id)
+
+        auto_join = payload.registration_mode == TeamRegistrationMode.SOLO
+        game_profile = None
+        if auto_join:
+            game_profile = await self.game_profile_repo.get_by_user_and_game(
+                current_user.id, payload.game_id
+            )
+            if game_profile is None:
+                raise ValidationException(
+                    "GAME_PROFILE_REQUIRED: Save your in-game nickname + UID for this "
+                    "game first (POST /games/profiles), then create the tournament again."
+                )
+
+        total_pool = payload.entry_fee * payload.max_players
+        prize_pool = (total_pool * (Decimal("1") - PLATFORM_COMMISSION_RATE)).quantize(
+            Decimal("0.01")
+        )
+
+        create_payload = TournamentCreate(
+            title=payload.title,
+            description=payload.description,
+            rules=payload.rules,
+            game_id=payload.game_id,
+            mode_id=payload.mode_id,
+            map_id=payload.map_id,
+            organizer=current_user.full_name,
+            entry_fee=payload.entry_fee,
+            prize_pool=prize_pool,
+            max_players=payload.max_players,
+            visibility=TournamentVisibility.PUBLIC,
+            is_featured=False,
+            registration_mode=payload.registration_mode,
+            team_size=payload.team_size,
+            max_teams=payload.max_teams,
+        )
+        tournament = await self.create_tournament(create_payload, current_user)
+
+        if auto_join:
+            try:
+                await SlotJoinService(self.session).join_solo(
+                    tournament.id, current_user, game_profile
+                )
+            except Exception:
+                # Tournament creation itself already succeeded and was
+                # committed -- surface the join failure distinctly rather
+                # than rolling back a tournament other players may already
+                # be able to see, but let the caller know the host still
+                # needs to join manually.
+                raise ValidationException(
+                    "Tournament created, but auto-join failed -- please join it manually."
+                )
+            await self.session.refresh(tournament)
 
         return tournament
 
