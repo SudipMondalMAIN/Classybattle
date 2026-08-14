@@ -13,6 +13,7 @@ from app.models.tournament import (
     TournamentStatus,
     TournamentVisibility,
 )
+from app.models.user import User, UserRole
 from app.repositories.base import BaseRepository
 
 _SORTABLE_FIELDS = {
@@ -123,12 +124,12 @@ class TournamentRepository(BaseRepository[Tournament]):
         visibility: Optional[TournamentVisibility] = None,
         is_featured: Optional[bool] = None,
         category: Optional[ScheduleCategory] = None,
-        is_custom: Optional[bool] = None,
         search: Optional[str] = None,
         sort_by: str = "created_at",
         sort_order: str = "desc",
         include_private: bool = False,
         include_deleted: bool = False,
+        is_custom: Optional[bool] = None,
     ) -> tuple[Sequence[Tournament], int]:
         conditions = []
         if not include_deleted:
@@ -148,15 +149,24 @@ class TournamentRepository(BaseRepository[Tournament]):
             conditions.append(Tournament.is_featured.is_(is_featured))
         if category is not None:
             conditions.append(Tournament.category == category)
-        # User-hosted "Custom Tournament" rows never carry a schedule
-        # category (see TournamentCustomCreate / TournamentService.
-        # create_custom_tournament) -- admin/schedule-generated rows
-        # always do. category IS NULL is therefore a reliable proxy for
-        # "custom" without needing a dedicated column.
-        if is_custom is True:
-            conditions.append(Tournament.category.is_(None))
-        elif is_custom is False:
-            conditions.append(Tournament.category.is_not(None))
+        if is_custom is not None:
+            # "Custom" tournaments are user-hosted (created_by a regular
+            # user), as opposed to admin-created / schedule-generated slots
+            # (created_by an admin/super_admin, or created_by is NULL for
+            # system-generated schedule slots).
+            admin_creator_ids = select(User.id).where(
+                User.role.in_([UserRole.ADMIN, UserRole.SUPER_ADMIN])
+            )
+            if is_custom:
+                conditions.append(Tournament.created_by.is_not(None))
+                conditions.append(Tournament.created_by.not_in(admin_creator_ids))
+            else:
+                conditions.append(
+                    or_(
+                        Tournament.created_by.is_(None),
+                        Tournament.created_by.in_(admin_creator_ids),
+                    )
+                )
         if search:
             q = search.strip()
             like = f"%{q.lower()}%"

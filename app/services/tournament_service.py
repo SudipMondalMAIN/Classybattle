@@ -334,6 +334,7 @@ class TournamentService:
         sort_by: str,
         sort_order: str,
         requesting_user: Optional[User],
+        is_custom: Optional[bool] = None,
     ):
         include_private = requesting_user is not None and self._is_admin(requesting_user)
         items, total = await self.repo.list_paginated(
@@ -348,6 +349,7 @@ class TournamentService:
             sort_by=sort_by,
             sort_order=sort_order,
             include_private=include_private,
+            is_custom=is_custom,
         )
         return items, total
 
