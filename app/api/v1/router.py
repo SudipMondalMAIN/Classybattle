@@ -14,6 +14,7 @@ from app.api.v1.auth_routes import router as auth_router
 from app.api.v1.game_mode_routes import router as game_mode_router
 from app.api.v1.game_routes import router as game_router
 from app.api.v1.health_routes import router as health_router
+from app.api.v1.home_category_box_routes import router as home_category_box_router
 from app.api.v1.leaderboard_routes import router as leaderboard_router
 from app.api.v1.map_routes import router as map_router
 from app.api.v1.moderation_routes import router as moderation_router
@@ -65,3 +66,4 @@ api_v1_router.include_router(security_router)
 api_v1_router.include_router(anti_cheat_router)
 api_v1_router.include_router(app_version_router)
 api_v1_router.include_router(banner_router)
+api_v1_router.include_router(home_category_box_router)

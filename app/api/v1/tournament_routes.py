@@ -15,7 +15,7 @@ from app.dependencies.auth import (
     get_current_user_optional,
     require_admin,
 )
-from app.models.tournament import TournamentStatus, TournamentVisibility
+from app.models.tournament import ScheduleCategory, TournamentStatus, TournamentVisibility
 from app.models.user import User
 from app.schemas.common import MessageResponse
 from app.schemas.tournament import (
@@ -87,6 +87,7 @@ async def list_tournaments(
     status: Optional[str] = Query(None),
     visibility: Optional[TournamentVisibility] = Query(None),
     is_featured: Optional[bool] = Query(None),
+    category: Optional[ScheduleCategory] = Query(None),
     search: Optional[str] = Query(None, max_length=200),
     sort_by: str = Query("created_at"),
     sort_order: str = Query("desc", pattern="^(?i)(asc|desc)$"),
@@ -100,6 +101,7 @@ async def list_tournaments(
         status=_resolve_status_filter(status),
         visibility=visibility,
         is_featured=is_featured,
+        category=category,
         search=search,
         sort_by=sort_by,
         sort_order=sort_order,

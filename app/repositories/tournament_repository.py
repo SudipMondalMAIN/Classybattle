@@ -7,7 +7,12 @@ from uuid import UUID
 from sqlalchemy import String, asc, cast, desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.tournament import Tournament, TournamentStatus, TournamentVisibility
+from app.models.tournament import (
+    ScheduleCategory,
+    Tournament,
+    TournamentStatus,
+    TournamentVisibility,
+)
 from app.repositories.base import BaseRepository
 
 _SORTABLE_FIELDS = {
@@ -117,6 +122,7 @@ class TournamentRepository(BaseRepository[Tournament]):
         status: Optional[Union[TournamentStatus, list[TournamentStatus]]] = None,
         visibility: Optional[TournamentVisibility] = None,
         is_featured: Optional[bool] = None,
+        category: Optional[ScheduleCategory] = None,
         search: Optional[str] = None,
         sort_by: str = "created_at",
         sort_order: str = "desc",
@@ -139,6 +145,8 @@ class TournamentRepository(BaseRepository[Tournament]):
             conditions.append(Tournament.visibility == visibility)
         if is_featured is not None:
             conditions.append(Tournament.is_featured.is_(is_featured))
+        if category is not None:
+            conditions.append(Tournament.category == category)
         if search:
             q = search.strip()
             like = f"%{q.lower()}%"
