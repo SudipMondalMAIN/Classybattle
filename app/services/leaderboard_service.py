@@ -617,6 +617,91 @@ class LeaderboardService:
         skip = (page - 1) * page_size
         return await self.rank_history_repo.list_for_entity(scope, entity_id, skip=skip, limit=page_size)
 
+    # ------------------------------------------------------------------
+    # 6. Admin panel result/payout flow (TournamentAdminService.pay_winner)
+    #
+    # The admin panel does NOT go through TournamentResult submit ->
+    # verify -> approve (record_match_completion above) -- it declares
+    # kills/winner/rank directly on the participant/team-member row and
+    # pays the wallet straight from TournamentAdminService. That flow
+    # never touched PlayerStatistics/PlayerPeriodStats, so leaderboards
+    # stayed empty even after tournaments were fully paid out. This is
+    # called from pay_winner (the one point in that flow that is itself
+    # idempotent, guarded by winning_paid_at) to fold the same win into
+    # statistics/leaderboard the same way record_match_completion does.
+    # ------------------------------------------------------------------
+    async def record_admin_winner_payout(
+        self, *, tournament_id: UUID, user_id: UUID, kills: int, rank: Optional[int], amount: Decimal
+    ) -> None:
+        source_id = f"{tournament_id}:{user_id}"
+        if await self.update_log_repo.exists(LeaderboardSourceEvent.WINNER_DECLARED, source_id):
+            return  # Already folded into statistics -- safe no-op on retry.
+
+        is_mvp = rank == 1
+        stats = await self.player_stats_repo.get_by_user_id_for_update(user_id)
+        if stats is None:
+            await self.player_stats_repo.get_or_create(user_id)
+            stats = await self.player_stats_repo.get_by_user_id_for_update(user_id)
+
+        matches_won = stats.matches_won + 1
+        new_kills = stats.kills + kills
+        new_mvp = stats.mvp_count + (1 if is_mvp else 0)
+        new_prize = stats.prize_money_earned + amount
+        new_wallet = stats.wallet_earnings + amount
+        score = _player_score(
+            matches_won=matches_won,
+            kills=new_kills,
+            deaths=stats.deaths,
+            assists=stats.assists,
+            mvp_count=new_mvp,
+            prize_money=new_prize,
+        )
+        await self.player_stats_repo.update(
+            stats,
+            matches_played=stats.matches_played + 1,
+            matches_won=matches_won,
+            kills=new_kills,
+            mvp_count=new_mvp,
+            prize_money_earned=new_prize,
+            wallet_earnings=new_wallet,
+            ranking_score=score,
+        )
+
+        pkeys = period_keys()
+        for ptype, pkey in pkeys.items():
+            period = await self.player_period_repo.get_or_create(user_id, ptype, pkey)
+            period = await self.player_period_repo.get_for_update(user_id, ptype, pkey)
+            p_won = period.matches_won + 1
+            p_kills = period.kills + kills
+            p_mvp = period.mvp_count + (1 if is_mvp else 0)
+            p_prize = period.prize_money_earned + amount
+            p_score = _player_score(
+                matches_won=p_won,
+                kills=p_kills,
+                deaths=period.deaths,
+                assists=period.assists,
+                mvp_count=p_mvp,
+                prize_money=p_prize,
+            )
+            await self.player_period_repo.update(
+                period,
+                matches_played=period.matches_played + 1,
+                matches_won=p_won,
+                kills=p_kills,
+                mvp_count=p_mvp,
+                prize_money_earned=p_prize,
+                ranking_score=p_score,
+            )
+
+        await self.update_log_repo.mark(
+            LeaderboardSourceEvent.WINNER_DECLARED, source_id, detail=f"tournament={tournament_id}"
+        )
+        await self.session.commit()
+
+        await self._evaluate_achievements(user_id, AchievementTriggerType.MATCH_WIN, matches_won)
+        if is_mvp:
+            await self._evaluate_achievements(user_id, AchievementTriggerType.MVP, new_mvp)
+
     async def tournament_player_rankings(
         self, tournament_id: UUID, *, page: int, page_size: int
     ) -> tuple[list[PlayerStatistics], int]:

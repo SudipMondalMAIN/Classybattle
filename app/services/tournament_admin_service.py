@@ -240,6 +240,25 @@ class TournamentAdminService:
         await self.session.refresh(row)
 
         tournament, _game = await self._get_tournament_and_game(tournament_id)
+
+        # Fold this paid win into leaderboard/statistics -- this admin
+        # flow never goes through TournamentResult approve, which is the
+        # only other place statistics get updated. See
+        # LeaderboardService.record_admin_winner_payout for why this is
+        # the right (idempotent) point to hook it in.
+        try:
+            from app.services.leaderboard_service import LeaderboardService
+
+            await LeaderboardService(self.session).record_admin_winner_payout(
+                tournament_id=tournament_id,
+                user_id=user_id,
+                kills=row.kills or 0,
+                rank=row.rank,
+                amount=amount,
+            )
+        except Exception:  # noqa: BLE001 - leaderboard stats must never block a payout
+            pass
+
         try:
             await NotificationDispatchService(self.session).dispatch(
                 user=user,
