@@ -17,8 +17,10 @@ from app.models.user import User
 from app.schemas.participant import (
     PaginatedParticipants,
     PaginatedParticipantsOrganizer,
+    PaginatedParticipantsPublic,
     ParticipantListItem,
     ParticipantOrganizerView,
+    ParticipantPublicView,
     ParticipantRead,
     ParticipantRegister,
     ParticipantStatusUpdate,
@@ -109,7 +111,7 @@ async def get_my_registration(
 # ----------------------------------------------------------------------
 @router.get(
     "/tournaments/{tournament_id}/participants",
-    response_model=PaginatedParticipants,
+    response_model=PaginatedParticipantsPublic,
 )
 async def list_tournament_participants(
     tournament_id: UUID,
@@ -119,10 +121,17 @@ async def list_tournament_participants(
     search: Optional[str] = Query(None, max_length=200),
     sort_by: str = Query("created_at"),
     sort_order: str = Query("desc", pattern="^(?i)(asc|desc)$"),
+    current_user: User = Depends(get_current_active_verified_user),
     session: AsyncSession = Depends(get_db_session),
 ):
+    """Public participant list for a tournament's details page: shows
+    every participant's avatar/name/in-game nickname+uid, and — once the
+    tournament has results — each participant's rank/win/prize too.
+    Requires a logged-in (verified) user, but any participant of the app
+    can view any tournament's roster, not just fellow participants.
+    """
     service = ParticipantService(session)
-    items, total = await service.list_participants_public(
+    items, total = await service.list_participants_public_view(
         tournament_id,
         page=page,
         page_size=page_size,
@@ -132,8 +141,8 @@ async def list_tournament_participants(
         sort_order=sort_order,
     )
     total_pages = math.ceil(total / page_size) if total else 0
-    return PaginatedParticipants(
-        items=[ParticipantListItem.model_validate(p) for p in items],
+    return PaginatedParticipantsPublic(
+        items=items,
         total=total,
         page=page,
         page_size=page_size,

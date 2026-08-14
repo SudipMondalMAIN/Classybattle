@@ -36,7 +36,7 @@ from app.repositories.participant_repository import ParticipantRepository
 from app.repositories.team_member_repository import TeamMemberRepository
 from app.repositories.tournament_participant_repository import TournamentParticipantRepository
 from app.repositories.tournament_repository import TournamentRepository
-from app.schemas.participant import ParticipantRegister
+from app.schemas.participant import ParticipantPublicView, ParticipantRegister
 from app.services.audit_service import AuditService
 from app.services.wallet_service import WalletService
 
@@ -676,6 +676,74 @@ class ParticipantService:
             sort_by=sort_by,
             sort_order=sort_order,
         )
+
+    async def list_participants_public_view(
+        self,
+        tournament_id: UUID,
+        *,
+        page: int,
+        page_size: int,
+        status: Optional[ParticipantStatus],
+        search: Optional[str],
+        sort_by: str,
+        sort_order: str,
+    ):
+        """Like list_participants_public, but enriched with each
+        participant's public user identity, in-game nickname/uid for the
+        tournament's game, and — once available — their result
+        (kills/rank/is_winner/winning_amount). Used by the tournament
+        details screen so every participant, and everyone's result once
+        the tournament completes, is visible to all viewers.
+        """
+        tournament = await self._get_tournament(tournament_id)
+        participants, total = await self.repo.list_for_tournament(
+            tournament_id,
+            page=page,
+            page_size=page_size,
+            status=status,
+            search=search,
+            sort_by=sort_by,
+            sort_order=sort_order,
+        )
+
+        # Pull result slots (kills/rank/is_winner/winning_amount) for this
+        # tournament and index by participant_id so we can attach them
+        # below without N+1 queries.
+        tp_repo = TournamentParticipantRepository(self.session)
+        result_slots = await tp_repo.list_for_tournament(tournament_id)
+        results_by_participant = {
+            slot.participant_id: slot
+            for slot in result_slots
+            if slot.participant_id is not None
+        }
+
+        views: list[ParticipantPublicView] = []
+        for p in participants:
+            game_profile = p.game_profile
+            data = (game_profile.data if game_profile else None) or {}
+            slot = results_by_participant.get(p.id)
+            views.append(
+                ParticipantPublicView(
+                    id=p.id,
+                    participant_uid=p.participant_uid,
+                    tournament_id=p.tournament_id,
+                    registration_type=p.registration_type,
+                    team_name=p.team_name,
+                    status=p.status,
+                    joined_at=p.joined_at,
+                    user_id=p.user_id,
+                    full_name=p.user.full_name,
+                    avatar_id=p.user.avatar_id,
+                    player_uid=p.user.player_uid,
+                    ingame_nickname=data.get("nickname"),
+                    ingame_uid=data.get("uid"),
+                    kills=slot.kills if slot else None,
+                    is_winner=slot.is_winner if slot else False,
+                    rank=slot.rank if slot else None,
+                    winning_amount=slot.winning_amount if slot else None,
+                )
+            )
+        return views, total
 
     async def list_participants_organizer(
         self,

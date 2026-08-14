@@ -91,6 +91,24 @@ class ModerationService:
             "shared_tournaments": shared,
         }
 
+    async def _assert_tournament_reportable(self, tournament_id: UUID) -> None:
+        """A tournament can be reported from the moment it goes live —
+        i.e. once its room has been published — and forever after
+        (no expiry / lifetime window), so both LIVE and COMPLETED
+        tournaments are reportable. Reporting is blocked only before
+        that point (SCHEDULED — nothing has happened yet to report) or
+        if it was CANCELLED (never went live).
+        """
+        from app.repositories.tournament_repository import TournamentRepository
+
+        tournament = await TournamentRepository(self.session).get_by_id(tournament_id)
+        if tournament is None:
+            raise NotFoundException("Tournament not found")
+        if tournament.published_at is None:
+            raise ValidationException(
+                "This tournament can only be reported after it has gone live"
+            )
+
     # ------------------------------------------------------------------
     # Reports (Player / Team / Match — unified, polymorphic target)
     # ------------------------------------------------------------------
@@ -104,6 +122,9 @@ class ModerationService:
         description: Optional[str],
         evidence_urls: Optional[list[str]] = None,
     ) -> Report:
+        if target_type == ReportTargetType.TOURNAMENT:
+            await self._assert_tournament_reportable(target_id)
+
         report = await self.report_repo.create(
             reporter_id=reporter.id,
             target_type=target_type,

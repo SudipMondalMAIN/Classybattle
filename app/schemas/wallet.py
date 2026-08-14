@@ -52,6 +52,13 @@ class WalletTransactionRead(BaseModel):
     related_transaction_id: Optional[UUID] = None
     performed_by_id: Optional[UUID] = None
     created_at: datetime
+    # Human-facing 10-digit transaction number — only populated for
+    # deposit (reference_type=payment_deposit) and withdrawal
+    # (reference_type=withdrawal_request) rows, pulled from the linked
+    # PaymentRequest/WithdrawalRequest.txn_no. None for every other
+    # transaction type (tournament entry, prize payout, etc.) since
+    # those don't have one.
+    txn_no: Optional[str] = None
 
 
 class PaginatedWalletTransactions(BaseModel):

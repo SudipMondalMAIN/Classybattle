@@ -72,6 +72,53 @@ class ParticipantOrganizerView(ParticipantListItem):
     updated_at: datetime
 
 
+class ParticipantPublicView(BaseModel):
+    """Public participant card shown inside a tournament's details page.
+
+    Combines the participant slot with the user's public identity
+    (avatar/name/player_uid), the in-game profile used for this
+    tournament's game (nickname/uid, taken from
+    ``UserGameProfile.data``), and — once results exist — the outcome
+    (rank / winner flag / prize amount) from the matching
+    ``TournamentParticipant`` slot.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    participant_uid: str
+    tournament_id: UUID
+    registration_type: RegistrationType
+    team_name: Optional[str] = None
+    status: ParticipantStatus
+    joined_at: datetime
+
+    # Public user identity
+    user_id: UUID
+    full_name: str
+    avatar_id: Optional[str] = None
+    player_uid: str
+
+    # In-game identity for this tournament's game (from UserGameProfile.data)
+    ingame_nickname: Optional[str] = None
+    ingame_uid: Optional[str] = None
+
+    # Result — populated once the tournament has a declared outcome for
+    # this participant (rank / winner / prize). All None until then.
+    kills: Optional[int] = None
+    is_winner: bool = False
+    rank: Optional[int] = None
+    winning_amount: Optional[Decimal] = None
+
+
+class PaginatedParticipantsPublic(BaseModel):
+    items: list[ParticipantPublicView]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+
+
 class PaginatedParticipants(BaseModel):
     items: list[ParticipantListItem]
     total: int

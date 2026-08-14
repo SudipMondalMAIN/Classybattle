@@ -6,11 +6,14 @@ from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_db_session
 from app.dependencies.auth import get_current_active_verified_user, require_admin
-from app.models.wallet_transaction import WalletTransactionStatus, WalletTransactionType
+from app.models.payment import PaymentRequest
+from app.models.wallet_transaction import WalletTransaction, WalletTransactionStatus, WalletTransactionType
+from app.models.withdrawal import WithdrawalRequest
 from app.models.user import User
 from app.repositories.user_repository import UserRepository
 from app.core.exceptions import NotFoundException
@@ -29,6 +32,50 @@ from app.schemas.wallet import (
 from app.services.wallet_service import WalletService
 
 router = APIRouter(tags=["Wallet"])
+
+# reference_type values that have a human-facing txn_no on another table.
+_DEPOSIT_REF_TYPE = "payment_deposit"
+_WITHDRAWAL_REF_TYPE = "withdrawal_request"
+
+
+async def _to_wallet_transaction_reads(
+    session: AsyncSession, transactions: list[WalletTransaction]
+) -> list[WalletTransactionRead]:
+    """Batch-attaches txn_no to deposit/withdrawal rows in one query per
+    type, instead of one lookup per row."""
+    deposit_ids = [
+        UUID(t.reference_id)
+        for t in transactions
+        if t.reference_type == _DEPOSIT_REF_TYPE and t.reference_id
+    ]
+    withdrawal_ids = [
+        UUID(t.reference_id)
+        for t in transactions
+        if t.reference_type == _WITHDRAWAL_REF_TYPE and t.reference_id
+    ]
+
+    txn_no_by_id: dict[str, str] = {}
+    if deposit_ids:
+        result = await session.execute(
+            select(PaymentRequest.id, PaymentRequest.txn_no).where(
+                PaymentRequest.id.in_(deposit_ids)
+            )
+        )
+        txn_no_by_id.update({str(pid): txn_no for pid, txn_no in result.all()})
+    if withdrawal_ids:
+        result = await session.execute(
+            select(WithdrawalRequest.id, WithdrawalRequest.txn_no).where(
+                WithdrawalRequest.id.in_(withdrawal_ids)
+            )
+        )
+        txn_no_by_id.update({str(wid): txn_no for wid, txn_no in result.all()})
+
+    reads = []
+    for t in transactions:
+        data = WalletTransactionRead.model_validate(t).model_dump()
+        data["txn_no"] = txn_no_by_id.get(t.reference_id)
+        reads.append(WalletTransactionRead(**data))
+    return reads
 
 
 def _to_wallet_with_total(wallet) -> WalletReadWithTotal:
@@ -73,7 +120,7 @@ async def list_my_transactions(
     )
     total_pages = math.ceil(total / page_size) if total else 0
     return PaginatedWalletTransactions(
-        items=[WalletTransactionRead.model_validate(t) for t in items],
+        items=await _to_wallet_transaction_reads(session, list(items)),
         total=total,
         page=page,
         page_size=page_size,
@@ -89,7 +136,8 @@ async def get_my_transaction_details(
 ):
     service = WalletService(session)
     txn = await service.get_transaction_details(current_user, transaction_id)
-    return WalletTransactionRead.model_validate(txn)
+    reads = await _to_wallet_transaction_reads(session, [txn])
+    return reads[0]
 
 
 @router.post("/wallet/hold", response_model=WalletTransactionRead, status_code=201)
@@ -166,7 +214,7 @@ async def admin_list_transactions(
     )
     total_pages = math.ceil(total / page_size) if total else 0
     return PaginatedWalletTransactions(
-        items=[WalletTransactionRead.model_validate(t) for t in items],
+        items=await _to_wallet_transaction_reads(session, list(items)),
         total=total,
         page=page,
         page_size=page_size,
