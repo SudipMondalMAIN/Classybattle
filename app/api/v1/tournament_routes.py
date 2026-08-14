@@ -103,6 +103,11 @@ async def list_tournaments(
     visibility: Optional[TournamentVisibility] = Query(None),
     is_featured: Optional[bool] = Query(None),
     category: Optional[ScheduleCategory] = Query(None),
+    is_custom: Optional[bool] = Query(
+        None,
+        description="True: only user-hosted Custom Tournaments (no schedule category). "
+        "False: only admin/schedule tournaments (solo or squad).",
+    ),
     search: Optional[str] = Query(None, max_length=200),
     sort_by: str = Query("created_at"),
     sort_order: str = Query("desc", pattern="^(?i)(asc|desc)$"),
@@ -117,6 +122,7 @@ async def list_tournaments(
         visibility=visibility,
         is_featured=is_featured,
         category=category,
+        is_custom=is_custom,
         search=search,
         sort_by=sort_by,
         sort_order=sort_order,

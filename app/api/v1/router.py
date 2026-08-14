@@ -9,6 +9,7 @@ from app.api.v1.admin_user_routes import router as admin_user_router
 from app.api.v1.anti_cheat_routes import router as anti_cheat_router
 from app.api.v1.app_version_routes import router as app_version_router
 from app.api.v1.banner_routes import router as banner_router
+from app.api.v1.custom_match_claim_routes import router as custom_match_claim_router
 from app.api.v1.security_routes import router as security_router
 from app.api.v1.auth_routes import router as auth_router
 from app.api.v1.game_mode_routes import router as game_mode_router
@@ -67,3 +68,4 @@ api_v1_router.include_router(anti_cheat_router)
 api_v1_router.include_router(app_version_router)
 api_v1_router.include_router(banner_router)
 api_v1_router.include_router(home_category_box_router)
+api_v1_router.include_router(custom_match_claim_router)

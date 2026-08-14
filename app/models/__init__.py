@@ -47,6 +47,11 @@ from app.models.tournament_participant import (
     TournamentCheckInStatus,
     TournamentParticipant,
 )
+from app.models.custom_match_claim import (
+    CustomMatchClaim,
+    CustomMatchClaimOutcome,
+    CustomMatchClaimStatus,
+)
 from app.models.tournament_result import (
     TOURNAMENT_RESULT_STATUS_TRANSITIONS,
     TournamentResult,
@@ -196,6 +201,9 @@ __all__ = [
     "TOURNAMENT_RESULT_STATUS_TRANSITIONS",
     "TournamentWinner",
     "WinnerAssignmentSource",
+    "CustomMatchClaim",
+    "CustomMatchClaimOutcome",
+    "CustomMatchClaimStatus",
     "PlayerStatistics",
     "TeamStatistics",
     "PlayerPeriodStats",

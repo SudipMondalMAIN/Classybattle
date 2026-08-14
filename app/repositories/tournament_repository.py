@@ -123,6 +123,7 @@ class TournamentRepository(BaseRepository[Tournament]):
         visibility: Optional[TournamentVisibility] = None,
         is_featured: Optional[bool] = None,
         category: Optional[ScheduleCategory] = None,
+        is_custom: Optional[bool] = None,
         search: Optional[str] = None,
         sort_by: str = "created_at",
         sort_order: str = "desc",
@@ -147,6 +148,15 @@ class TournamentRepository(BaseRepository[Tournament]):
             conditions.append(Tournament.is_featured.is_(is_featured))
         if category is not None:
             conditions.append(Tournament.category == category)
+        # User-hosted "Custom Tournament" rows never carry a schedule
+        # category (see TournamentCustomCreate / TournamentService.
+        # create_custom_tournament) -- admin/schedule-generated rows
+        # always do. category IS NULL is therefore a reliable proxy for
+        # "custom" without needing a dedicated column.
+        if is_custom is True:
+            conditions.append(Tournament.category.is_(None))
+        elif is_custom is False:
+            conditions.append(Tournament.category.is_not(None))
         if search:
             q = search.strip()
             like = f"%{q.lower()}%"
