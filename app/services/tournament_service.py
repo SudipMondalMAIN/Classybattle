@@ -16,6 +16,7 @@ from app.core.exceptions import (
 )
 from app.models.tournament import (
     TOURNAMENT_STATUS_TRANSITIONS,
+    TeamRegistrationMode,
     Tournament,
     TournamentStatus,
     TournamentVisibility,
@@ -329,7 +330,6 @@ class TournamentService:
         visibility,
         is_featured: Optional[bool],
         category=None,
-        is_custom: Optional[bool] = None,
         search: Optional[str],
         sort_by: str,
         sort_order: str,
@@ -344,7 +344,6 @@ class TournamentService:
             visibility=visibility,
             is_featured=is_featured,
             category=category,
-            is_custom=is_custom,
             search=search,
             sort_by=sort_by,
             sort_order=sort_order,

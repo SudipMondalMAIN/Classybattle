@@ -14,10 +14,12 @@ class IdempotencyKeyRepository:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
-    async def get(self, scope: str, key: str) -> Optional[IdempotencyKey]:
+    async def get(self, scope: str, key: str, user_id: Optional[Any] = None) -> Optional[IdempotencyKey]:
         stmt = select(IdempotencyKey).where(
             IdempotencyKey.scope == scope, IdempotencyKey.key == key
         )
+        if user_id is not None:
+            stmt = stmt.where(IdempotencyKey.user_id == user_id)
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 

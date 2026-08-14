@@ -85,7 +85,7 @@ class IdempotencyService:
         already in progress concurrently.
         """
         fingerprint = _fingerprint(payload)
-        existing = await self.repository.get(scope, key)
+        existing = await self.repository.get(scope, key, user_id=user_id)
 
         if existing is not None:
             if existing.request_fingerprint != fingerprint:
