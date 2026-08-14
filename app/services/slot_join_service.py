@@ -75,7 +75,7 @@ class SlotJoinService:
             user,
             amount=fee,
             reference_type=_WALLET_SLOT_ENTRY_REF_TYPE,
-            reference_id=str(tournament.id),
+            reference_id=f"{tournament.id}:{user.id}",
             description=f"Entry fee for '{tournament.title}'",
             commit=False,
         )
