@@ -53,8 +53,13 @@ class SlotJoinService:
         self.participant_repo = ParticipantRepository(session)
         self.wallet_service = WalletService(session)
 
-    async def _get_joinable_slot(self, tournament_id: UUID) -> Tournament:
-        tournament = await self.tournament_repo.get_by_id(tournament_id)
+    async def _get_joinable_slot(
+        self, tournament_id: UUID, for_update: bool = False
+    ) -> Tournament:
+        if for_update:
+            tournament = await self.tournament_repo.get_by_id_for_update(tournament_id)
+        else:
+            tournament = await self.tournament_repo.get_by_id(tournament_id)
         if tournament is None:
             raise NotFoundException("Tournament slot not found")
         if tournament.status != TournamentStatus.SCHEDULED:
@@ -86,7 +91,11 @@ class SlotJoinService:
     async def join_solo(
         self, tournament_id: UUID, current_user: User, game_profile: UserGameProfile
     ) -> TournamentParticipant:
-        tournament = await self._get_joinable_slot(tournament_id)
+        # Row-lock the tournament for the duration of this join so that
+        # concurrent joiners are serialized: capacity check + slot_number
+        # allocation stay consistent even under a burst of simultaneous
+        # requests (e.g. 50 users tapping "Join" at once).
+        tournament = await self._get_joinable_slot(tournament_id, for_update=True)
         await self._assert_capacity(tournament)
 
         existing_participant = await self.participant_repo.get_by_tournament_and_user(
@@ -147,7 +156,9 @@ class SlotJoinService:
         invite_code: Optional[str],
         join_random: bool,
     ) -> TournamentTeam:
-        tournament = await self._get_joinable_slot(tournament_id)
+        # Same reasoning as join_solo: lock the tournament row so
+        # concurrent team-creation / team-capacity checks are serialized.
+        tournament = await self._get_joinable_slot(tournament_id, for_update=True)
 
         resolved_format = team_format or (
             "solo" if tournament.category is None or tournament.category.value == "solo"

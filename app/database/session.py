@@ -9,6 +9,15 @@ from app.config.settings import settings
 
 _engine_kwargs: dict = {"echo": settings.DB_ECHO, "pool_pre_ping": True}
 
+# When running through Supabase's Transaction Pooler (PgBouncer,
+# port 6543), asyncpg's prepared-statement cache must be disabled --
+# PgBouncer swaps the underlying connection between statements in
+# transaction mode, and a cached prepared statement can end up bound
+# to a different backend connection than it was created on, causing
+# random "prepared statement does not exist" errors.
+if ":6543" in settings.DATABASE_URL:
+    _engine_kwargs["connect_args"] = {"statement_cache_size": 0}
+
 # SQLite (used in local/dev testing) doesn't support pool_size/max_overflow.
 if not settings.DATABASE_URL.startswith("sqlite"):
     _engine_kwargs["pool_size"] = settings.DB_POOL_SIZE

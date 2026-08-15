@@ -30,6 +30,24 @@ class TournamentRepository(BaseRepository[Tournament]):
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(session, Tournament)
 
+    async def get_by_id_for_update(
+        self, id_: UUID, include_deleted: bool = False
+    ) -> Optional[Tournament]:
+        """Row-locking read used inside join transactions to serialize
+        concurrent joins against the same tournament slot, preventing
+        capacity-check races and slot_number collisions under load.
+
+        SQLite (test suite) doesn't support SELECT ... FOR UPDATE; the
+        clause is skipped there since sqlite already serializes writers.
+        """
+        stmt = select(Tournament).where(Tournament.id == id_)
+        if not include_deleted:
+            stmt = stmt.where(Tournament.deleted_at.is_(None))
+        if self.session.bind.dialect.name != "sqlite":
+            stmt = stmt.with_for_update()
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
     async def get_by_slug(self, slug: str, include_deleted: bool = False) -> Optional[Tournament]:
         stmt = select(Tournament).where(Tournament.slug == slug)
         if not include_deleted:
