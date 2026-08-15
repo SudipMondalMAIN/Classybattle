@@ -1,8 +1,10 @@
 """
 Withdrawal service — orchestrates user withdrawal requests against a saved
-PaymentMethod, backed by the Wallet module's HOLD / RELEASE_HOLD primitives
-so funds are safely reserved while a request is pending and either
-captured (paid out) or refunded by an admin decision.
+PaymentMethod. The amount is DEBITED from the wallet immediately on
+request (not just reserved), so the balance drops right away. If an admin
+later cancels/rejects the request, the amount is refunded via a CREDIT.
+If completed, nothing further happens to the wallet — the money is
+already gone.
 """
 from datetime import datetime, timezone
 from typing import Optional
@@ -71,9 +73,12 @@ class WithdrawalService:
         self.session.add(withdrawal)
         await self.session.flush()
 
-        # Reserve the funds immediately so they can't be spent elsewhere
-        # while the request is pending admin action.
-        hold_txn = await self.wallet_service.hold(
+        # Deduct the amount from the wallet immediately on request — the
+        # user's balance drops right away instead of just being reserved.
+        # If the request is later cancelled/rejected, this is refunded via
+        # a CREDIT (see _settle). If completed, nothing further happens to
+        # the wallet — the money is already gone.
+        debit_txn = await self.wallet_service.debit(
             user,
             amount=payload.amount,
             reference_type=_REFERENCE_TYPE,
@@ -81,7 +86,7 @@ class WithdrawalService:
             description=f"Withdrawal request {withdrawal.id}",
             commit=False,
         )
-        withdrawal.hold_transaction_id = hold_txn.id
+        withdrawal.hold_transaction_id = debit_txn.id
         await self.session.commit()
         await self.session.refresh(withdrawal)
 
@@ -121,7 +126,7 @@ class WithdrawalService:
         return list(rows), total
 
     async def cancel_own_request(self, user: User, withdrawal_id: UUID) -> WithdrawalRequest:
-        """User-initiated cancel, only while still pending — refunds the hold."""
+        """User-initiated cancel, only while still pending — refunds the debited amount."""
         withdrawal = await self.get_owned(user, withdrawal_id)
         return await self._settle(withdrawal, capture=False, actor=user, admin_note=None)
 
@@ -166,14 +171,15 @@ class WithdrawalService:
         self, admin: User, withdrawal_id: UUID, admin_note: Optional[str]
     ) -> WithdrawalRequest:
         """Admin has manually paid the user via the snapshotted method —
-        captures the hold so the funds leave the wallet permanently."""
+        the amount was already debited from the wallet at request time,
+        so this just marks the request as paid out."""
         withdrawal = await self._get(withdrawal_id)
         return await self._settle(withdrawal, capture=True, actor=admin, admin_note=admin_note)
 
     async def cancel(
         self, admin: User, withdrawal_id: UUID, admin_note: Optional[str]
     ) -> WithdrawalRequest:
-        """Admin cancels/rejects — releases the hold, refunding the amount
+        """Admin cancels/rejects — refunds the previously debited amount
         back to the user's available balance."""
         withdrawal = await self._get(withdrawal_id)
         return await self._settle(withdrawal, capture=False, actor=admin, admin_note=admin_note)
@@ -203,19 +209,24 @@ class WithdrawalService:
             raise ConflictException("This withdrawal request has no reserved funds to settle")
 
         owner = await self.session.get(User, withdrawal.user_id)
-        settlement_txn = await self.wallet_service.release_hold(
-            owner,
-            hold_transaction_id=withdrawal.hold_transaction_id,
-            capture=capture,
-            description=(
-                f"Withdrawal {withdrawal.id} paid out"
-                if capture
-                else f"Withdrawal {withdrawal.id} cancelled/refunded"
-            ),
-            commit=False,
-        )
 
-        withdrawal.settlement_transaction_id = settlement_txn.id
+        if capture:
+            # Amount was already deducted from the wallet at request time —
+            # completing just marks the request as paid out, no further
+            # wallet movement is needed.
+            settlement_txn = None
+        else:
+            # Refund the previously debited amount back to the user.
+            settlement_txn = await self.wallet_service.credit(
+                owner,
+                amount=withdrawal.amount,
+                reference_type=_REFERENCE_TYPE,
+                reference_id=str(withdrawal.id),
+                description=f"Withdrawal {withdrawal.id} cancelled/refunded",
+                commit=False,
+            )
+
+        withdrawal.settlement_transaction_id = settlement_txn.id if settlement_txn else None
         withdrawal.status = WithdrawalStatus.COMPLETED if capture else WithdrawalStatus.CANCELLED
         withdrawal.processed_by_id = actor.id
         withdrawal.processed_at = datetime.now(timezone.utc)

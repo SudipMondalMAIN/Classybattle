@@ -77,8 +77,10 @@ class WithdrawalRequest(ShortIdMixin, BaseModel):
         index=True,
     )
 
-    # Links to the wallet HOLD transaction created at submission, and the
-    # RELEASE_HOLD transaction that settles it (capture or refund).
+    # Links to the wallet DEBIT transaction created at submission (field
+    # name kept as-is to avoid a migration), and the CREDIT transaction
+    # that refunds it on cancel/reject. Left null on COMPLETED, since the
+    # debit already stands and nothing further happens to the wallet.
     hold_transaction_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("wallet_transactions.id", ondelete="SET NULL"), nullable=True
     )
