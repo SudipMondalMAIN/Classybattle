@@ -40,20 +40,10 @@ def do_run_migrations(connection: Connection) -> None:
 
 
 async def run_migrations_online() -> None:
-    # Same pgbouncer-transaction-pooler fix as app/database/session.py:
-    # disable asyncpg's prepared-statement cache when running through the
-    # pooler (port 6543), otherwise alembic's own async engine hits
-    # "prepared statement already exists" / "does not exist" errors and
-    # crashes the migration step before the app even starts.
-    connect_args = {}
-    if ":6543" in settings.DATABASE_URL:
-        connect_args["statement_cache_size"] = 0
-
     connectable = async_engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
-        connect_args=connect_args,
     )
 
     async with connectable.connect() as connection:
