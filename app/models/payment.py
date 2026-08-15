@@ -92,6 +92,13 @@ class PaymentSettings(Base):
         Numeric(14, 2), default=100000, server_default="100000", nullable=False
     )
 
+    min_withdrawal_amount: Mapped[Decimal] = mapped_column(
+        Numeric(14, 2), default=100, server_default="100", nullable=False
+    )
+    max_withdrawal_amount: Mapped[Decimal] = mapped_column(
+        Numeric(14, 2), default=100000, server_default="100000", nullable=False
+    )
+
     updated_by_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )

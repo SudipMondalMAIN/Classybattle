@@ -28,6 +28,8 @@ class PaymentSettingsRead(BaseModel):
     is_upi_enabled: bool
     min_deposit_amount: Decimal
     max_deposit_amount: Decimal
+    min_withdrawal_amount: Decimal
+    max_withdrawal_amount: Decimal
     updated_by_id: Optional[UUID] = None
     updated_at: datetime
 
@@ -41,6 +43,8 @@ class PaymentSettingsUpdateRequest(BaseModel):
     is_upi_enabled: Optional[bool] = None
     min_deposit_amount: Optional[Decimal] = Field(None, gt=0, decimal_places=2)
     max_deposit_amount: Optional[Decimal] = Field(None, gt=0, decimal_places=2)
+    min_withdrawal_amount: Optional[Decimal] = Field(None, gt=0, decimal_places=2)
+    max_withdrawal_amount: Optional[Decimal] = Field(None, gt=0, decimal_places=2)
 
     @field_validator("upi_id")
     @classmethod

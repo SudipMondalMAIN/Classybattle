@@ -131,6 +131,8 @@ class PaymentService:
             "is_upi_enabled": settings_row.is_upi_enabled,
             "min_deposit_amount": settings_row.min_deposit_amount,
             "max_deposit_amount": settings_row.max_deposit_amount,
+            "min_withdrawal_amount": settings_row.min_withdrawal_amount,
+            "max_withdrawal_amount": settings_row.max_withdrawal_amount,
         }
 
         update_fields = {k: v for k, v in payload.items() if v is not None}
@@ -141,6 +143,11 @@ class PaymentService:
         max_amt = update_fields.get("max_deposit_amount", settings_row.max_deposit_amount)
         if min_amt is not None and max_amt is not None and min_amt > max_amt:
             raise ValidationException("min_deposit_amount cannot exceed max_deposit_amount")
+
+        min_wd = update_fields.get("min_withdrawal_amount", settings_row.min_withdrawal_amount)
+        max_wd = update_fields.get("max_withdrawal_amount", settings_row.max_withdrawal_amount)
+        if min_wd is not None and max_wd is not None and min_wd > max_wd:
+            raise ValidationException("min_withdrawal_amount cannot exceed max_withdrawal_amount")
 
         settings_row = await self.settings_repo.update(
             settings_row, **update_fields, updated_by_id=admin.id

@@ -11,13 +11,19 @@ from uuid import UUID
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import BadRequestException, ConflictException, NotFoundException
+from app.core.exceptions import (
+    BadRequestException,
+    ConflictException,
+    NotFoundException,
+    ValidationException,
+)
 from app.models.notification import NotificationEventType
 from app.models.user import User
 from app.models.withdrawal import WithdrawalRequest, WithdrawalStatus
 from app.notifications.dispatch_service import NotificationDispatchService
 from app.schemas.withdrawal import WithdrawalRequestCreate
 from app.services.payment_method_service import PaymentMethodService
+from app.services.payment_service import PaymentService
 from app.services.wallet_service import WalletService
 from app.utils.txn_id import generate_unique_txn_no
 
@@ -29,6 +35,7 @@ class WithdrawalService:
         self.session = session
         self.wallet_service = WalletService(session)
         self.payment_method_service = PaymentMethodService(session)
+        self.payment_service = PaymentService(session)
 
     # ------------------------------------------------------------------
     # User-facing
@@ -39,6 +46,16 @@ class WithdrawalService:
         method = await self.payment_method_service.get_owned(user, payload.payment_method_id)
         if not method.is_active:
             raise BadRequestException("This payment method is not active")
+
+        settings_row = await self.payment_service.get_settings()
+        if payload.amount < settings_row.min_withdrawal_amount:
+            raise ValidationException(
+                f"Minimum withdrawal amount is {settings_row.min_withdrawal_amount}"
+            )
+        if payload.amount > settings_row.max_withdrawal_amount:
+            raise ValidationException(
+                f"Maximum withdrawal amount is {settings_row.max_withdrawal_amount}"
+            )
 
         txn_no = await generate_unique_txn_no(self.session, WithdrawalRequest)
 
