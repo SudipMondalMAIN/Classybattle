@@ -220,6 +220,7 @@ class TournamentRead(BaseModel):
     room_password: Optional[str] = None
     published_at: Optional[datetime] = None
     auto_complete_at: Optional[datetime] = None
+    starts_at: Optional[datetime] = None
     registration_mode: TeamRegistrationMode
     team_size: int
     max_teams: Optional[int] = None
@@ -251,6 +252,7 @@ class TournamentListItem(BaseModel):
     is_featured: bool
     registration_mode: TeamRegistrationMode
     team_size: int
+    starts_at: Optional[datetime] = None
 
 
 class PaginatedTournaments(BaseModel):

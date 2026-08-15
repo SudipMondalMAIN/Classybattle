@@ -74,6 +74,11 @@ class SlotGeneratorService:
             if await self.tournament_repo.slug_exists(slug):
                 continue
 
+            starts_at = datetime(
+                target_date.year, target_date.month, target_date.day, hour, minute,
+                tzinfo=IST,
+            ).astimezone(timezone.utc)
+
             tournament = await self.tournament_repo.create(
                 title=f"{template.title} - {time_str} IST",
                 slug=slug,
@@ -99,6 +104,7 @@ class SlotGeneratorService:
                 category=template.category,
                 squad_size=template.squad_size,
                 created_by=template.created_by,
+                starts_at=starts_at,
             )
             created.append(tournament)
 
@@ -151,6 +157,11 @@ class SlotGeneratorService:
             if not is_finished:
                 continue  # today's slot hasn't finished yet
 
+            starts_at = datetime(
+                tomorrow.year, tomorrow.month, tomorrow.day, hour, minute,
+                tzinfo=IST,
+            ).astimezone(timezone.utc)
+
             new_tournament = await self.tournament_repo.create(
                 title=f"{template.title} - {time_str} IST",
                 slug=tomorrow_slug,
@@ -176,6 +187,7 @@ class SlotGeneratorService:
                 category=template.category,
                 squad_size=template.squad_size,
                 created_by=template.created_by,
+                starts_at=starts_at,
             )
             created.append(new_tournament)
             tomorrow_slugs.add(tomorrow_slug)

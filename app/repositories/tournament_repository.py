@@ -4,7 +4,7 @@ Tournament repository -- queries specific to the Tournament module.
 from typing import Optional, Sequence, Union
 from uuid import UUID
 
-from sqlalchemy import String, asc, cast, desc, func, or_, select
+from sqlalchemy import String, asc, cast, desc, func, nulls_last, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.tournament import (
@@ -18,6 +18,7 @@ from app.repositories.base import BaseRepository
 
 _SORTABLE_FIELDS = {
     "created_at": Tournament.created_at,
+    "starts_at": Tournament.starts_at,
     "prize_pool": Tournament.prize_pool,
     "entry_fee": Tournament.entry_fee,
     "title": Tournament.title,
@@ -184,10 +185,19 @@ class TournamentRepository(BaseRepository[Tournament]):
         sort_column = _SORTABLE_FIELDS.get(sort_by, Tournament.created_at)
         order_fn = asc if sort_order.lower() == "asc" else desc
 
+        # starts_at is null for legacy/un-backfilled rows -- always push
+        # those to the end regardless of asc/desc so they don't jumble in
+        # among rows that do have a real scheduled time.
+        order_clause = (
+            nulls_last(order_fn(sort_column))
+            if sort_column is Tournament.starts_at
+            else order_fn(sort_column)
+        )
+
         stmt = (
             select(Tournament)
             .where(*conditions)
-            .order_by(order_fn(sort_column))
+            .order_by(order_clause)
             .offset((page - 1) * page_size)
             .limit(page_size)
         )

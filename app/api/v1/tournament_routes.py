@@ -109,8 +109,8 @@ async def list_tournaments(
         "False: only admin/schedule tournaments (solo or squad).",
     ),
     search: Optional[str] = Query(None, max_length=200),
-    sort_by: str = Query("created_at"),
-    sort_order: str = Query("desc", pattern="^(?i)(asc|desc)$"),
+    sort_by: str = Query("starts_at"),
+    sort_order: str = Query("asc", pattern="^(?i)(asc|desc)$"),
     session: AsyncSession = Depends(get_db_session),
 ):
     service = TournamentService(session)

@@ -284,6 +284,14 @@ class TournamentService:
         )
         tournament = await self.create_tournament(create_payload, current_user)
 
+        # Custom tournaments have no admin-set slot time (join is instant),
+        # so use the creation instant as their sort position -- otherwise
+        # they'd have a null starts_at and always sort after every
+        # schedule-generated slot regardless of how soon they're starting.
+        tournament.starts_at = tournament.created_at
+        await self.session.commit()
+        await self.session.refresh(tournament)
+
         if auto_join:
             try:
                 await SlotJoinService(self.session).join_solo(

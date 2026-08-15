@@ -179,6 +179,17 @@ class Tournament(ShortIdMixin, BaseModel):
     published_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     auto_complete_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    # Absolute (UTC-stored) scheduled kickoff for this slot, e.g. an admin
+    # slot time of "18:00" IST on 2026-08-15 is stored here as the
+    # equivalent UTC instant. Set once at slot-generation time (see
+    # SlotGeneratorService) for admin/schedule-generated tournaments; left
+    # null for one-off custom tournaments, which join instantly and have
+    # no fixed kickoff. This is the single source of truth for
+    # chronological ("10:00, then 10:30, then 11:00...") ordering in the
+    # tournament list -- created_at reflects generation/batch order, not
+    # slot time, and must not be used for display ordering.
+    starts_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+
     # ------------------------------------------------------------------
     # Team registration settings (Phase 6).
     # ------------------------------------------------------------------
