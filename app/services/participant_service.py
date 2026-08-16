@@ -7,7 +7,7 @@ Orchestrates registration validation, capacity management, status
 transitions, entry-fee payment/refunds via the Wallet module (Phase 8),
 and authorization between the repository layer and the Tournament module.
 """
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from uuid import UUID
 
@@ -65,6 +65,14 @@ _ACTIVE_STATUSES = {
 # as opposed to organizer/admin-only transitions (e.g. CONFIRMED, REJECTED).
 _SELF_SERVICE_TARGETS = {ParticipantStatus.CANCELLED}
 
+# Custom tournaments are user-hosted with no fixed slot time; the host
+# auto-joins on creation. The host may only cancel their own join (or
+# delete the tournament -- see TournamentService.cancel_custom_tournament)
+# once it's clear an opponent isn't coming: after this grace period with
+# still nobody else joined. This stops a host yanking the tournament out
+# from under someone who joined seconds ago.
+CUSTOM_HOST_CANCEL_GRACE_MINUTES = 10
+
 
 class ParticipantService:
     def __init__(self, session: AsyncSession) -> None:
@@ -85,6 +93,28 @@ class ParticipantService:
 
     def _is_organizer(self, tournament: Tournament, user: User) -> bool:
         return tournament.created_by is not None and tournament.created_by == user.id
+
+    @staticmethod
+    def _assert_custom_host_cancel_allowed(tournament: Tournament) -> None:
+        """Shared gate for a Custom Tournament host cancelling their own
+        join or deleting the tournament: only once an opponent still
+        hasn't joined after the grace period."""
+        if tournament.current_players > 1:
+            raise ValidationException(
+                "An opponent has already joined -- you can no longer cancel or "
+                "delete this tournament."
+            )
+        created_at = tournament.created_at
+        if created_at.tzinfo is None:
+            created_at = created_at.replace(tzinfo=timezone.utc)
+        elapsed = datetime.now(timezone.utc) - created_at
+        if elapsed < timedelta(minutes=CUSTOM_HOST_CANCEL_GRACE_MINUTES):
+            remaining = CUSTOM_HOST_CANCEL_GRACE_MINUTES - int(elapsed.total_seconds() // 60)
+            raise ValidationException(
+                "CUSTOM_CANCEL_TOO_EARLY: Give it a bit longer for an opponent to "
+                f"join -- you can cancel or delete in about {max(remaining, 1)} more "
+                "minute(s) if nobody has joined yet."
+            )
 
     def _assert_can_manage_tournament(self, tournament: Tournament, user: User) -> None:
         if self._is_admin(user) or self._is_organizer(tournament, user):
@@ -424,6 +454,20 @@ class ParticipantService:
             raise ValidationException(
                 "Cannot cancel a registration once the tournament is live or completed"
             )
+
+        # Extra gate: the host of a user-hosted Custom Tournament cancelling
+        # their own auto-join. Admins and non-host participants are
+        # unaffected -- this only fires when the actor is the tournament's
+        # creator on their own registration for a Custom Tournament
+        # (category is None => custom, as opposed to admin/schedule slots).
+        if (
+            actor is not None
+            and not self._is_admin(actor)
+            and tournament.category is None
+            and self._is_organizer(tournament, actor)
+            and participant.user_id == actor.id
+        ):
+            self._assert_custom_host_cancel_allowed(tournament)
 
         was_active = participant.status in _ACTIVE_STATUSES
         was_paid = participant.payment_status == ParticipantPaymentStatus.PAID

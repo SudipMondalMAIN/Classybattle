@@ -31,6 +31,7 @@ from app.repositories.tournament_repository import TournamentRepository
 from app.schemas.tournament import TournamentCreate, TournamentCustomCreate, TournamentUpdate
 from app.services.audit_service import AuditService
 from app.services.slot_join_service import SlotJoinService
+from app.services.wallet_service import WalletService
 from app.storage.storage_service import StorageService
 from app.utils.slug import generate_unique_suffix, slugify
 
@@ -259,6 +260,18 @@ class TournamentService:
                     "GAME_PROFILE_REQUIRED: Save your in-game nickname + UID for this "
                     "game first (POST /games/profiles), then create the tournament again."
                 )
+
+            # The host is auto-joined (and charged the entry fee) right
+            # after this row is created. Check the wallet balance up
+            # front so we never create an orphan tournament that the
+            # host can't actually afford to join.
+            if payload.entry_fee and payload.entry_fee > 0:
+                wallet = await WalletService(self.session).get_or_create_wallet(current_user)
+                if wallet.available_balance < payload.entry_fee:
+                    raise ValidationException(
+                        "INSUFFICIENT_BALANCE: Your wallet balance is too low to cover "
+                        "the entry fee for this tournament. Add funds and try again."
+                    )
 
         total_pool = payload.entry_fee * payload.max_players
         prize_pool = (total_pool * (Decimal("1") - PLATFORM_COMMISSION_RATE)).quantize(
@@ -550,6 +563,34 @@ class TournamentService:
     async def soft_delete_tournament(self, tournament_id: UUID, current_user: User) -> None:
         tournament = await self.get_by_id(tournament_id)
         self._assert_can_manage(tournament, current_user)
+
+        # Same "opponent hasn't joined yet, and it's been at least
+        # CUSTOM_HOST_CANCEL_GRACE_MINUTES" gate as cancelling a join --
+        # applies only when a non-admin host is deleting their own
+        # user-hosted Custom Tournament while it's still open.
+        is_custom_host_delete = (
+            not self._is_admin(current_user)
+            and tournament.category is None
+            and tournament.created_by is not None
+            and tournament.created_by == current_user.id
+            and tournament.status == TournamentStatus.SCHEDULED
+        )
+        if is_custom_host_delete:
+            from app.services.participant_service import ParticipantService
+
+            ParticipantService._assert_custom_host_cancel_allowed(tournament)
+            # Refund the host's own entry fee (they were auto-joined at
+            # creation) before removing the tournament, so the money
+            # doesn't just vanish.
+            participant_service = ParticipantService(self.session)
+            host_participant = await self.participant_repo.get_by_tournament_and_user(
+                tournament.id, current_user.id
+            )
+            if host_participant is not None:
+                await participant_service._cancel(
+                    tournament, host_participant, actor=current_user
+                )
+
         await self.repo.soft_delete(tournament)
         await self.session.commit()
 

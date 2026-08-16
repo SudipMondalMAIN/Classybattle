@@ -120,6 +120,23 @@ class CustomMatchClaimService:
         ):
             raise ValidationException("This match's result has already been resolved.")
 
+        # Bug fix: the check above only guards against the *current
+        # user's own* claim being re-submitted after resolution. It
+        # missed the case where the opponent's claim already resolved
+        # the match (e.g. opponent claimed LOSS and was auto-paid) but
+        # this user had never submitted anything yet (existing is None
+        # here). Without this guard, this user could still submit a
+        # fresh LOSS claim afterwards and trigger a second payout to
+        # their opponent -- letting both players get paid.
+        opponent_claim_precheck = await self.claim_repo.get_by_tournament_and_user(
+            tournament_id, opponent_id
+        )
+        if opponent_claim_precheck is not None and opponent_claim_precheck.status in (
+            CustomMatchClaimStatus.AUTO_RESOLVED,
+            CustomMatchClaimStatus.ADMIN_APPROVED,
+        ):
+            raise ValidationException("This match's result has already been resolved.")
+
         if existing is None:
             claim = await self.claim_repo.create(
                 tournament_id=tournament_id,
