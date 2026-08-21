@@ -70,14 +70,16 @@ class PrizeType(str, enum.Enum):
 
 class ScheduleCategory(str, enum.Enum):
     """Simplified per-game category for auto-generated daily tournament
-    schedules: every Game has at most two schedules — SOLO
-    (classic/battle-royale, join alone) and SQUAD (Clash-Squad style,
-    join as a fixed-size team). No map/mode picking needed; Admin only
+    schedules: every Game can have any number of schedules per category —
+    SOLO (classic/battle-royale, join alone), DUO (fixed 2-player team),
+    and SQUAD (Clash-Squad style, join as a fixed-size team, size
+    admin-configurable). No map/mode picking needed; Admin only
     configures tournaments-per-day, per-tournament time, entry fee and
     prize pool for each.
     """
 
     SOLO = "solo"
+    DUO = "duo"
     SQUAD = "squad"
 
 

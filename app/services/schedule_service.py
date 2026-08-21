@@ -77,6 +77,11 @@ class ScheduleService:
         """
         if category == ScheduleCategory.SQUAD:
             return TeamRegistrationMode.AUTO_RANDOM, squad_size
+        if category == ScheduleCategory.DUO:
+            # Duo is always a fixed 2-player team -- squad_size is locked
+            # to 2 by ScheduleCreate/ScheduleUpdate validation, but pin it
+            # here too so this stays correct even if called elsewhere.
+            return TeamRegistrationMode.AUTO_RANDOM, 2
         return TeamRegistrationMode.SOLO, 1
 
     async def create_schedule(
@@ -84,10 +89,11 @@ class ScheduleService:
     ) -> Tournament:
         game = await self._assert_game_exists(payload.game_id)
 
-        # NOTE: multiple SOLO schedules and multiple SQUAD schedules per
+        # NOTE: multiple schedules per category (SOLO, DUO, SQUAD) per
         # game are allowed on purpose -- the old one-active-schedule-per
-        # -game-category check used to block creating a second Solo/Squad
-        # schedule for the same game, which is no longer desired.
+        # -game-category check used to block creating a second schedule
+        # of the same category for the same game, which is no longer
+        # desired. Applies identically to the new DUO category.
 
         base_slug = slugify(f"{game.name}-{payload.category.value}")
         slug = base_slug
@@ -156,6 +162,10 @@ class ScheduleService:
                 for r in payload.rank_prize_rules
             ]
         if "squad_size" in update_data and update_data["squad_size"] is not None:
+            if schedule.category == ScheduleCategory.DUO:
+                # Duo stays locked to a 2-player team even if a different
+                # squad_size was sent in the request.
+                update_data["squad_size"] = 2
             # Keep team_size in sync so future generated matches still
             # match the schedule's category/squad_size correctly.
             _, team_size = self._registration_mode_for_category(

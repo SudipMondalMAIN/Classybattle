@@ -45,7 +45,10 @@ def _validate_rank_prize_rules(v: Optional[list[RankPrizeRule]]) -> Optional[lis
 class ScheduleCreate(BaseModel):
     game_id: UUID
     category: ScheduleCategory
-    squad_size: int = Field(default=4, gt=1, le=10, description="Only used when category='squad'")
+    squad_size: int = Field(
+        default=4, gt=1, le=10,
+        description="Only used when category='squad' or 'duo'. Ignored for 'solo'; forced to 2 for 'duo'.",
+    )
     entry_fee: Decimal = Field(default=Decimal("0"), ge=0)
     prize_pool: Decimal = Field(default=Decimal("0"), ge=0)
     max_players_per_slot: int = Field(..., gt=0, le=1000)
@@ -96,11 +99,15 @@ class ScheduleCreate(BaseModel):
 
     @model_validator(mode="after")
     def _check_squad_capacity(self) -> "ScheduleCreate":
-        # category drives registration_mode downstream (SQUAD -> AUTO_RANDOM,
-        # team_size=squad_size). Guard the capacity math here too so a SQUAD
-        # schedule can never be created with a max_players_per_slot that
-        # doesn't divide evenly into full squads.
-        if self.category == ScheduleCategory.SQUAD:
+        # category drives registration_mode downstream (SQUAD/DUO ->
+        # AUTO_RANDOM, team_size=squad_size). Guard the capacity math here
+        # too so a SQUAD/DUO schedule can never be created with a
+        # max_players_per_slot that doesn't divide evenly into full teams.
+        if self.category == ScheduleCategory.DUO:
+            # Duo is always a fixed 2-player team -- lock it regardless of
+            # whatever squad_size was passed in.
+            self.squad_size = 2
+        if self.category in (ScheduleCategory.SQUAD, ScheduleCategory.DUO):
             if self.max_players_per_slot < self.squad_size:
                 raise ValueError(
                     f"max_players_per_slot ({self.max_players_per_slot}) must be at least "
