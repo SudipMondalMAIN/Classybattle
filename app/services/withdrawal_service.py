@@ -141,7 +141,9 @@ class WithdrawalService:
         if status is not None:
             stmt = stmt.where(WithdrawalRequest.status == status)
             count_stmt = count_stmt.where(WithdrawalRequest.status == status)
-        stmt = stmt.order_by(WithdrawalRequest.created_at.asc()).offset((page - 1) * page_size).limit(
+        # Newest first: admins reviewing withdrawals need to see the latest
+        # requests on page 1, not buried behind however many old ones exist.
+        stmt = stmt.order_by(WithdrawalRequest.created_at.desc()).offset((page - 1) * page_size).limit(
             page_size
         )
         total = (await self.session.execute(count_stmt)).scalar_one()
