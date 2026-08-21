@@ -10,7 +10,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from app.models.tournament import ScheduleCategory
+from app.models.tournament import PrizeType, ScheduleCategory
 
 _TIME_RE = r"^([01]\d|2[0-3]):[0-5]\d$"
 
@@ -23,6 +23,22 @@ def _validate_times(v: list[str]) -> list[str]:
     for t in v:
         if not re.match(_TIME_RE, t):
             raise ValueError(f"Invalid time '{t}' — expected 24h 'HH:MM' format, e.g. '18:30'")
+    return v
+
+
+class RankPrizeRule(BaseModel):
+    rank: int = Field(..., gt=0)
+    amount: Decimal = Field(..., ge=0)
+
+
+def _validate_rank_prize_rules(v: Optional[list[RankPrizeRule]]) -> Optional[list[RankPrizeRule]]:
+    if v is None:
+        return v
+    if not v:
+        raise ValueError("rank_prize_rules cannot be empty when provided")
+    ranks = [r.rank for r in v]
+    if len(ranks) != len(set(ranks)):
+        raise ValueError("rank_prize_rules contains duplicate ranks")
     return v
 
 
@@ -39,10 +55,44 @@ class ScheduleCreate(BaseModel):
         ..., description="One '24h HH:MM' string per match generated each day, e.g. ['10:00','10:30',...]. Count = matches/day (default 27, but any number works)."
     )
 
+    # ---------------------------------------------------------------
+    # Prize type -- Admin picks one at schedule-creation time, editable
+    # afterwards via ScheduleUpdate (same as entry_fee/prize_pool).
+    # ---------------------------------------------------------------
+    prize_type: PrizeType = Field(
+        default=PrizeType.RANK,
+        description="How winners get paid: rank | per_kill | win.",
+    )
+    rank_prize_rules: Optional[list[RankPrizeRule]] = Field(
+        default=None,
+        description="Required when prize_type='rank'. e.g. [{'rank':1,'amount':500},{'rank':2,'amount':300}]",
+    )
+    per_kill_amount: Optional[Decimal] = Field(
+        default=None, ge=0, description="Required when prize_type='per_kill'. ₹ per confirmed kill."
+    )
+    win_amount: Optional[Decimal] = Field(
+        default=None, ge=0, description="Required when prize_type='win'. Flat ₹ for the declared winner."
+    )
+
     @field_validator("daily_slot_times")
     @classmethod
     def _check_times(cls, v):
         return _validate_times(v)
+
+    @field_validator("rank_prize_rules")
+    @classmethod
+    def _check_rank_rules(cls, v):
+        return _validate_rank_prize_rules(v)
+
+    @model_validator(mode="after")
+    def _check_prize_type_fields(self) -> "ScheduleCreate":
+        if self.prize_type == PrizeType.RANK and not self.rank_prize_rules:
+            raise ValueError("rank_prize_rules is required when prize_type='rank'")
+        if self.prize_type == PrizeType.PER_KILL and self.per_kill_amount is None:
+            raise ValueError("per_kill_amount is required when prize_type='per_kill'")
+        if self.prize_type == PrizeType.WIN and self.win_amount is None:
+            raise ValueError("win_amount is required when prize_type='win'")
+        return self
 
     @model_validator(mode="after")
     def _check_squad_capacity(self) -> "ScheduleCreate":
@@ -76,12 +126,36 @@ class ScheduleUpdate(BaseModel):
     )
     is_active: Optional[bool] = None
 
+    # Prize type -- editable any time, same as entry_fee/prize_pool.
+    # Passing prize_type alone (without the matching amount field) is
+    # rejected, so a schedule can never end up in a state where
+    # prize_type='per_kill' but per_kill_amount is still null.
+    prize_type: Optional[PrizeType] = None
+    rank_prize_rules: Optional[list[RankPrizeRule]] = None
+    per_kill_amount: Optional[Decimal] = Field(None, ge=0)
+    win_amount: Optional[Decimal] = Field(None, ge=0)
+
     @field_validator("daily_slot_times")
     @classmethod
     def _check_times(cls, v):
         if v is None:
             return v
         return _validate_times(v)
+
+    @field_validator("rank_prize_rules")
+    @classmethod
+    def _check_rank_rules(cls, v):
+        return _validate_rank_prize_rules(v)
+
+    @model_validator(mode="after")
+    def _check_prize_type_fields(self) -> "ScheduleUpdate":
+        if self.prize_type == PrizeType.RANK and not self.rank_prize_rules:
+            raise ValueError("rank_prize_rules is required when setting prize_type='rank'")
+        if self.prize_type == PrizeType.PER_KILL and self.per_kill_amount is None:
+            raise ValueError("per_kill_amount is required when setting prize_type='per_kill'")
+        if self.prize_type == PrizeType.WIN and self.win_amount is None:
+            raise ValueError("win_amount is required when setting prize_type='win'")
+        return self
 
 
 class ScheduleRead(BaseModel):
@@ -99,6 +173,10 @@ class ScheduleRead(BaseModel):
     daily_slot_times: Optional[list[str]] = None
     matches_per_day: int = 0
     last_generated_on: Optional[datetime] = None
+    prize_type: PrizeType = PrizeType.RANK
+    rank_prize_rules: Optional[list[RankPrizeRule]] = None
+    per_kill_amount: Optional[Decimal] = None
+    win_amount: Optional[Decimal] = None
 
     @model_validator(mode="after")
     def _compute_matches_per_day(self) -> "ScheduleRead":

@@ -52,6 +52,22 @@ class TeamRegistrationMode(str, enum.Enum):
     AUTO_RANDOM = "auto_random"
 
 
+class PrizeType(str, enum.Enum):
+    """How a tournament/schedule pays out winners (Raj's prize-type flow).
+
+    RANK: classic rank-based prize breakdown (1st/2nd/3rd... amounts),
+        stored in `rank_prize_rules`.
+    PER_KILL: flat amount paid per confirmed kill, stored in
+        `per_kill_amount` -- payout = kills * per_kill_amount.
+    WIN: flat bonus paid only to whoever is marked the winner, stored in
+        `win_amount`.
+    """
+
+    RANK = "rank"
+    PER_KILL = "per_kill"
+    WIN = "win"
+
+
 class ScheduleCategory(str, enum.Enum):
     """Simplified per-game category for auto-generated daily tournament
     schedules: every Game has at most two schedules — SOLO
@@ -108,6 +124,14 @@ class Tournament(ShortIdMixin, BaseModel):
             "max_teams IS NULL OR max_teams > 0",
             name="ck_tournaments_max_teams_positive",
         ),
+        CheckConstraint(
+            "per_kill_amount IS NULL OR per_kill_amount >= 0",
+            name="ck_tournaments_per_kill_amount_non_negative",
+        ),
+        CheckConstraint(
+            "win_amount IS NULL OR win_amount >= 0",
+            name="ck_tournaments_win_amount_non_negative",
+        ),
         Index("ix_tournaments_status_visibility", "status", "visibility"),
         Index("ix_tournaments_game_status", "game_id", "status"),
         Index("ix_tournaments_status_auto_complete", "status", "auto_complete_at"),
@@ -149,6 +173,32 @@ class Tournament(ShortIdMixin, BaseModel):
 
     entry_fee: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=0, nullable=False)
     prize_pool: Mapped[Decimal] = mapped_column(Numeric(12, 2), default=0, nullable=False)
+
+    # ------------------------------------------------------------------
+    # Prize type config (Raj's flow). Set at schedule-creation time,
+    # editable afterwards same as entry_fee/prize_pool -- every slot
+    # generated from a schedule inherits its template's current values.
+    # Exactly one of the three payout fields below is used, based on
+    # `prize_type`:
+    #   RANK      -> rank_prize_rules   (e.g. [{"rank":1,"amount":500}, ...])
+    #   PER_KILL  -> per_kill_amount    (₹ paid per confirmed kill)
+    #   WIN       -> win_amount         (flat ₹ paid to the declared winner)
+    # ------------------------------------------------------------------
+    prize_type: Mapped["PrizeType"] = mapped_column(
+        str_enum(PrizeType, "prize_type"), default=PrizeType.RANK, nullable=False
+    )
+    rank_prize_rules: Mapped[Optional[list]] = mapped_column(
+        PortableJSONB, nullable=True,
+        comment="Used when prize_type='rank'. List of {'rank': int, 'amount': number}.",
+    )
+    per_kill_amount: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(10, 2), nullable=True,
+        comment="Used when prize_type='per_kill'. ₹ paid per confirmed kill.",
+    )
+    win_amount: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(10, 2), nullable=True,
+        comment="Used when prize_type='win'. Flat ₹ paid to the declared winner.",
+    )
 
     max_players: Mapped[int] = mapped_column(Integer, nullable=False)
     current_players: Mapped[int] = mapped_column(Integer, default=0, nullable=False)

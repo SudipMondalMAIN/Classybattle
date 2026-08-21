@@ -127,6 +127,14 @@ class ScheduleService:
             banner_url=payload.banner_url,
             cover_url=payload.cover_url,
             daily_slot_times=sorted(set(payload.daily_slot_times)),
+            prize_type=payload.prize_type,
+            rank_prize_rules=(
+                [r.model_dump(mode="json") for r in payload.rank_prize_rules]
+                if payload.rank_prize_rules
+                else None
+            ),
+            per_kill_amount=payload.per_kill_amount,
+            win_amount=payload.win_amount,
             created_by=current_user.id,
             # Derived from category so generated matches never end up
             # mislabeled solo under a Squad title (see
@@ -145,6 +153,12 @@ class ScheduleService:
         update_data = payload.model_dump(exclude_unset=True)
         if "daily_slot_times" in update_data and update_data["daily_slot_times"] is not None:
             update_data["daily_slot_times"] = sorted(set(update_data["daily_slot_times"]))
+        if "rank_prize_rules" in update_data and update_data["rank_prize_rules"] is not None:
+            # JSON-mode dump so Decimal amounts store as JSONB-safe values.
+            update_data["rank_prize_rules"] = [
+                r.model_dump(mode="json") if hasattr(r, "model_dump") else r
+                for r in payload.rank_prize_rules
+            ]
         if "squad_size" in update_data and update_data["squad_size"] is not None:
             # Keep team_size in sync so future generated matches still
             # match the schedule's category/squad_size correctly.

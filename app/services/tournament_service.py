@@ -384,6 +384,13 @@ class TournamentService:
 
         update_data = payload.model_dump(exclude_unset=True)
 
+        if "rank_prize_rules" in update_data and update_data["rank_prize_rules"] is not None:
+            # JSON-mode dump so Decimal amounts store as JSONB-safe values.
+            update_data["rank_prize_rules"] = [
+                r.model_dump(mode="json") if hasattr(r, "model_dump") else r
+                for r in payload.rank_prize_rules
+            ]
+
         if "title" in update_data and update_data["title"] != tournament.title:
             if await self.repo.title_exists(update_data["title"], tournament.game_id):
                 raise ConflictException(

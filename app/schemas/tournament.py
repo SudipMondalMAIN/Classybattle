@@ -12,14 +12,16 @@ from decimal import Decimal
 from typing import Optional
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.models.tournament import (
+    PrizeType,
     ScheduleCategory,
     TeamRegistrationMode,
     TournamentStatus,
     TournamentVisibility,
 )
+from app.schemas.schedule import RankPrizeRule
 
 
 class TournamentCreate(BaseModel):
@@ -169,10 +171,27 @@ class TournamentUpdate(BaseModel):
     is_featured: Optional[bool] = None
     max_teams: Optional[int] = Field(None, gt=0)
     daily_slot_times: Optional[list[str]] = None
+    # Prize type -- editable on an individual generated slot too (e.g.
+    # admin bumps this one tournament's per-kill rate for a special
+    # event), same override pattern as entry_fee/prize_pool.
+    prize_type: Optional[PrizeType] = None
+    rank_prize_rules: Optional[list[RankPrizeRule]] = None
+    per_kill_amount: Optional[Decimal] = Field(None, ge=0)
+    win_amount: Optional[Decimal] = Field(None, ge=0)
     # registration_mode and team_size are intentionally NOT editable here once
     # a tournament has any teams/participants attached -- see
     # TournamentService.update_tournament, which blocks changing them after
     # players have joined, to avoid corrupting existing teams.
+
+    @model_validator(mode="after")
+    def _check_prize_type_fields(self) -> "TournamentUpdate":
+        if self.prize_type == PrizeType.RANK and not self.rank_prize_rules:
+            raise ValueError("rank_prize_rules is required when setting prize_type='rank'")
+        if self.prize_type == PrizeType.PER_KILL and self.per_kill_amount is None:
+            raise ValueError("per_kill_amount is required when setting prize_type='per_kill'")
+        if self.prize_type == PrizeType.WIN and self.win_amount is None:
+            raise ValueError("win_amount is required when setting prize_type='win'")
+        return self
 
 
 class TournamentStatusUpdate(BaseModel):
@@ -211,6 +230,10 @@ class TournamentRead(BaseModel):
     organizer: str
     entry_fee: Decimal
     prize_pool: Decimal
+    prize_type: PrizeType
+    rank_prize_rules: Optional[list[RankPrizeRule]] = None
+    per_kill_amount: Optional[Decimal] = None
+    win_amount: Optional[Decimal] = None
     max_players: int
     current_players: int
     status: TournamentStatus
@@ -245,6 +268,7 @@ class TournamentListItem(BaseModel):
     organizer: str
     entry_fee: Decimal
     prize_pool: Decimal
+    prize_type: PrizeType
     max_players: int
     current_players: int
     status: TournamentStatus
