@@ -149,10 +149,18 @@ class TournamentRepository(BaseRepository[Tournament]):
         include_private: bool = False,
         include_deleted: bool = False,
         is_custom: Optional[bool] = None,
+        include_schedule_templates: bool = False,
     ) -> tuple[Sequence[Tournament], int]:
         conditions = []
         if not include_deleted:
             conditions.append(Tournament.deleted_at.is_(None))
+        if not include_schedule_templates:
+            # Recurring schedule *templates* (is_recurring_schedule=True)
+            # are config-only rows -- never joinable/playable. Without this
+            # filter every schedule creation leaks an extra "ghost"
+            # tournament into public/admin listings alongside its real
+            # generated slot(s).
+            conditions.append(Tournament.is_recurring_schedule.is_(False))
         if not include_private:
             conditions.append(Tournament.visibility != TournamentVisibility.PRIVATE)
         if game_id is not None:

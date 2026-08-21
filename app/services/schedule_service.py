@@ -28,6 +28,29 @@ from app.schemas.schedule import ScheduleCreate, ScheduleUpdate
 from app.services.slot_generator_service import IST, SlotGeneratorService
 from app.utils.slug import slugify
 
+# Fixed rules text applied to every schedule automatically -- Admin never
+# types this in. Only the "Game Mode" line changes, based on the
+# schedule's category (Squad / Solo), so every generated slot under this
+# schedule inherits the correct rules with no manual per-schedule setup.
+_RULES_TEMPLATE = """1. GENERAL RULES
+\u2022 Eligibility: Players must use official Free Fire Max accounts (Level 35+).
+\u2022 Profile Data: Game ID (UID) and In-Game Name (IGN) must match registration details.
+\u2022 Roster Lock: No player changes are allowed after registration closes.
+
+2. MATCH SETTINGS
+\u2022 Game Mode: {mode}.
+\u2022 Gun Skins: Gun attributes/extra powers will be turned ON.
+\u2022 Room Details: Room ID and Password will be shared 10 minutes before the match.
+
+3. FAIR PLAY & BANS
+\u2022 Zero Tolerance: Use of hacks, scripts, or glitches will result in a permanent ban.
+\u2022 No Teaming: Teaming up with enemies will lead to instant disqualification.
+\u2022 Technical Issues: No rematch for personal internet issues or device crashes."""
+
+
+def _build_rules(category: ScheduleCategory) -> str:
+    return _RULES_TEMPLATE.format(mode=category.value.title())
+
 
 class ScheduleService:
     def __init__(self, session: AsyncSession) -> None:
@@ -85,6 +108,9 @@ class ScheduleService:
             # Template row -- never joined directly, so status/visibility
             # here are just harmless defaults.
             title=f"{game.name} - {payload.category.value.title()}",
+            # Auto-filled, fixed rules -- Admin doesn't add these manually;
+            # every generated slot inherits this via template.rules.
+            rules=_build_rules(payload.category),
             slug=slug,
             organizer="System",
             current_players=0,
@@ -146,7 +172,9 @@ class ScheduleService:
         if active_only:
             schedules = await self.repo.list_active_recurring_schedules()
         else:
-            items, _ = await self.repo.list_paginated(page=1, page_size=200)
+            items, _ = await self.repo.list_paginated(
+                page=1, page_size=200, include_schedule_templates=True
+            )
             schedules = [t for t in items if t.is_recurring_schedule]
         if game_id is not None:
             schedules = [s for s in schedules if s.game_id == game_id]

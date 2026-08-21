@@ -80,7 +80,11 @@ class SlotGeneratorService:
             ).astimezone(timezone.utc)
 
             tournament = await self.tournament_repo.create(
-                title=f"{template.title} - {time_str} IST",
+                # No time suffix -- e.g. "FREE FIRE - Squad", not
+                # "FREE FIRE - Squad - 10:00 IST". The slot's actual time
+                # lives in `starts_at`; the slug still encodes it for
+                # idempotent lookups.
+                title=template.title,
                 slug=slug,
                 description=template.description,
                 rules=template.rules,
@@ -163,7 +167,8 @@ class SlotGeneratorService:
             ).astimezone(timezone.utc)
 
             new_tournament = await self.tournament_repo.create(
-                title=f"{template.title} - {time_str} IST",
+                # See generate_for_day -- no time suffix on the title.
+                title=template.title,
                 slug=tomorrow_slug,
                 description=template.description,
                 rules=template.rules,
