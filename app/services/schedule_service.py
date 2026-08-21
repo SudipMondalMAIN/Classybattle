@@ -13,7 +13,7 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import ConflictException, NotFoundException, ValidationException
+from app.core.exceptions import NotFoundException, ValidationException
 from app.models.tournament import (
     ScheduleCategory,
     TeamRegistrationMode,
@@ -84,14 +84,10 @@ class ScheduleService:
     ) -> Tournament:
         game = await self._assert_game_exists(payload.game_id)
 
-        existing = await self.repo.get_active_schedule_for_game_category(
-            payload.game_id, payload.category
-        )
-        if existing is not None:
-            raise ConflictException(
-                f"A {payload.category.value} schedule already exists for this game -- "
-                "edit it instead of creating a duplicate."
-            )
+        # NOTE: multiple SOLO schedules and multiple SQUAD schedules per
+        # game are allowed on purpose -- the old one-active-schedule-per
+        # -game-category check used to block creating a second Solo/Squad
+        # schedule for the same game, which is no longer desired.
 
         base_slug = slugify(f"{game.name}-{payload.category.value}")
         slug = base_slug
