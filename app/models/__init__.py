@@ -104,6 +104,13 @@ from app.models.security import (
     SecurityEventSeverity,
     SecurityEventType,
 )
+from app.models.support_chat import (
+    SupportChatClosedBy,
+    SupportChatMessage,
+    SupportChatSenderType,
+    SupportChatSession,
+    SupportChatStatus,
+)
 from app.models.social import (
     ActivityFeedEntry,
     ActivityType,
@@ -263,4 +270,9 @@ __all__ = [
     "PaymentMethodType",
     "WithdrawalRequest",
     "WithdrawalStatus",
+    "SupportChatSession",
+    "SupportChatMessage",
+    "SupportChatStatus",
+    "SupportChatClosedBy",
+    "SupportChatSenderType",
 ]
