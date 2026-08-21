@@ -103,6 +103,11 @@ async def list_tournaments(
     visibility: Optional[TournamentVisibility] = Query(None),
     is_featured: Optional[bool] = Query(None),
     category: Optional[ScheduleCategory] = Query(None),
+    format: Optional[str] = Query(
+        None,
+        description="Browse-tournaments filter chip: solo | duo | squad | free | custom. "
+        "Combine with game_id to get e.g. 'this game, solo only'.",
+    ),
     is_custom: Optional[bool] = Query(
         None,
         description="True: only user-hosted Custom Tournaments (no schedule category). "
@@ -122,6 +127,7 @@ async def list_tournaments(
         visibility=visibility,
         is_featured=is_featured,
         category=category,
+        format=format,
         is_custom=is_custom,
         search=search,
         sort_by=sort_by,

@@ -143,6 +143,7 @@ class TournamentRepository(BaseRepository[Tournament]):
         visibility: Optional[TournamentVisibility] = None,
         is_featured: Optional[bool] = None,
         category: Optional[ScheduleCategory] = None,
+        format: Optional[str] = None,
         search: Optional[str] = None,
         sort_by: str = "created_at",
         sort_order: str = "desc",
@@ -176,6 +177,29 @@ class TournamentRepository(BaseRepository[Tournament]):
             conditions.append(Tournament.is_featured.is_(is_featured))
         if category is not None:
             conditions.append(Tournament.category == category)
+        if format is not None:
+            # "Browse Tournaments" filter chips: solo/duo/squad go off
+            # team_size (real join-time team size, set consistently for
+            # both admin/schedule-generated and custom/team-invite
+            # tournaments -- see slot_generator_service.py). free/custom
+            # are independent axes and can be combined with the others
+            # by the caller passing both `format` and `is_custom`, or
+            # just entry_fee via `format=free`.
+            fmt = format.strip().lower()
+            if fmt == "solo":
+                conditions.append(Tournament.team_size == 1)
+            elif fmt == "duo":
+                conditions.append(Tournament.team_size == 2)
+            elif fmt == "squad":
+                conditions.append(Tournament.team_size >= 3)
+            elif fmt == "free":
+                conditions.append(Tournament.entry_fee == 0)
+            elif fmt == "custom":
+                admin_creator_ids = select(User.id).where(
+                    User.role.in_([UserRole.ADMIN, UserRole.SUPER_ADMIN])
+                )
+                conditions.append(Tournament.created_by.is_not(None))
+                conditions.append(Tournament.created_by.not_in(admin_creator_ids))
         if is_custom is not None:
             # "Custom" tournaments are user-hosted (created_by a regular
             # user), as opposed to admin-created / schedule-generated slots

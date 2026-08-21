@@ -1,10 +1,13 @@
 """
 Wallet model — Phase 8 (Enterprise Wallet System).
 
-One wallet per user. Holds two balances:
-- available_balance: funds the user can spend/withdraw right now.
-- locked_balance: funds held (e.g. against a pending match/tournament
-  entry) that cannot be spent until released, captured, or refunded.
+One wallet per user. Holds three balances:
+- deposit_balance: money the user has added themselves (UPI top-up).
+  Usable ONLY to join tournaments — never withdrawable.
+- winnings_balance: money earned from prize payouts / refunds / bonuses.
+  Usable to join tournaments AND to withdraw.
+- locked_balance: funds held (e.g. against a pending withdrawal/hold)
+  that cannot be spent until released, captured, or refunded.
 
 Balances are only ever mutated through WalletService inside a single
 DB transaction alongside the corresponding immutable WalletTransaction
@@ -27,7 +30,8 @@ class Wallet(BaseModel):
     __tablename__ = "wallets"
     __table_args__ = (
         UniqueConstraint("user_id", name="uq_wallets_user_id"),
-        CheckConstraint("available_balance >= 0", name="ck_wallets_available_balance_non_negative"),
+        CheckConstraint("deposit_balance >= 0", name="ck_wallets_deposit_balance_non_negative"),
+        CheckConstraint("winnings_balance >= 0", name="ck_wallets_winnings_balance_non_negative"),
         CheckConstraint("locked_balance >= 0", name="ck_wallets_locked_balance_non_negative"),
     )
 
@@ -38,7 +42,14 @@ class Wallet(BaseModel):
         index=True,
     )
 
-    available_balance: Mapped[Decimal] = mapped_column(
+    # Deposit-only bucket: top-ups via UPI/payment gateway. Spendable only
+    # on tournament entry fees — never withdrawable.
+    deposit_balance: Mapped[Decimal] = mapped_column(
+        Numeric(14, 2), default=0, server_default="0", nullable=False
+    )
+    # Winnings bucket: prize payouts, entry-fee refunds, admin bonuses.
+    # Spendable on tournament entry fees AND withdrawable to bank/UPI.
+    winnings_balance: Mapped[Decimal] = mapped_column(
         Numeric(14, 2), default=0, server_default="0", nullable=False
     )
     locked_balance: Mapped[Decimal] = mapped_column(
@@ -57,11 +68,19 @@ class Wallet(BaseModel):
     )
 
     @property
+    def available_balance(self) -> Decimal:
+        """Backward-compat: total spendable (deposit + winnings), before
+        locked funds. Existing code/schemas that read `available_balance`
+        keep working unchanged."""
+        return self.deposit_balance + self.winnings_balance
+
+    @property
     def total_balance(self) -> Decimal:
-        return self.available_balance + self.locked_balance
+        return self.deposit_balance + self.winnings_balance + self.locked_balance
 
     def __repr__(self) -> str:
         return (
             f"<Wallet id={self.id} user_id={self.user_id} "
-            f"available={self.available_balance} locked={self.locked_balance}>"
+            f"deposit={self.deposit_balance} winnings={self.winnings_balance} "
+            f"locked={self.locked_balance}>"
         )

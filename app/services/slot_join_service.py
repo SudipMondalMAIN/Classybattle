@@ -76,7 +76,7 @@ class SlotJoinService:
     async def _charge_entry_fee(self, tournament: Tournament, user: User, fee) -> None:
         if not fee or fee <= 0:
             return
-        await self.wallet_service.debit(
+        await self.wallet_service.debit_entry_fee(
             user,
             amount=fee,
             reference_type=_WALLET_SLOT_ENTRY_REF_TYPE,

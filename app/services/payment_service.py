@@ -377,6 +377,8 @@ class PaymentService:
         # Wallet credit + PaymentRequest status transition happen in one
         # transaction: commit=False keeps the wallet mutation open, we
         # append the status update, and commit exactly once below.
+        from app.models.wallet_transaction import WalletBalanceSource
+
         txn = await self.wallet_service.credit(
             target_user,
             amount=payment_request.amount,
@@ -384,6 +386,7 @@ class PaymentService:
             reference_id=str(payment_request.id),
             description=f"UPI deposit approved (UTR {payment_request.utr_number})",
             metadata={"payment_request_id": str(payment_request.id)},
+            source=WalletBalanceSource.DEPOSIT,
             commit=False,
         )
 

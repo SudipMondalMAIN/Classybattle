@@ -40,6 +40,7 @@ from app.models.audit_log import AuditAction, AuditActorType
 from app.models.user import User, UserRole
 from app.models.wallet import Wallet
 from app.models.wallet_transaction import (
+    WalletBalanceSource,
     WalletTransaction,
     WalletTransactionStatus,
     WalletTransactionType,
@@ -153,8 +154,10 @@ class WalletService:
         user_id: UUID,
         type_: WalletTransactionType,
         amount: Decimal,
-        available_delta: Decimal,
-        locked_delta: Decimal,
+        deposit_delta: Decimal = Decimal("0"),
+        winnings_delta: Decimal = Decimal("0"),
+        locked_delta: Decimal = Decimal("0"),
+        balance_source: WalletBalanceSource = WalletBalanceSource.WINNINGS,
         status: WalletTransactionStatus = WalletTransactionStatus.SUCCESS,
         description: Optional[str] = None,
         reference_type: Optional[str] = None,
@@ -182,15 +185,19 @@ class WalletService:
         if wallet.is_frozen:
             raise ForbiddenException("This wallet is frozen and cannot process transactions")
 
-        new_available = wallet.available_balance + available_delta
+        new_deposit = wallet.deposit_balance + deposit_delta
+        new_winnings = wallet.winnings_balance + winnings_delta
         new_locked = wallet.locked_balance + locked_delta
 
-        if new_available < 0:
-            raise BadRequestException("Insufficient available balance")
+        if new_deposit < 0:
+            raise BadRequestException("Insufficient deposit balance")
+        if new_winnings < 0:
+            raise BadRequestException("Insufficient winnings balance")
         if new_locked < 0:
             raise BadRequestException("Insufficient locked balance")
 
-        wallet.available_balance = new_available
+        wallet.deposit_balance = new_deposit
+        wallet.winnings_balance = new_winnings
         wallet.locked_balance = new_locked
 
         try:
@@ -201,7 +208,12 @@ class WalletService:
                 status=status,
                 amount=amount,
                 currency=wallet.currency,
-                available_balance_after=new_available,
+                balance_source=balance_source,
+                deposit_delta=deposit_delta,
+                winnings_delta=winnings_delta,
+                deposit_balance_after=new_deposit,
+                winnings_balance_after=new_winnings,
+                available_balance_after=new_deposit + new_winnings,
                 locked_balance_after=new_locked,
                 description=description,
                 reference_type=reference_type,
@@ -231,15 +243,22 @@ class WalletService:
         reference_id: Optional[str] = None,
         description: Optional[str] = None,
         metadata: Optional[dict] = None,
+        source: WalletBalanceSource = WalletBalanceSource.WINNINGS,
         commit: bool = True,
     ) -> WalletTransaction:
+        """source=DEPOSIT for UPI top-ups (payment_service), WINNINGS
+        (default) for prize payouts / refunds / bonuses — winnings are
+        the only credited funds that stay withdrawable."""
         await self.get_or_create_wallet(user)
+        deposit_delta = amount if source == WalletBalanceSource.DEPOSIT else Decimal("0")
+        winnings_delta = amount if source == WalletBalanceSource.WINNINGS else Decimal("0")
         txn = await self._mutate(
             user_id=user.id,
             type_=WalletTransactionType.CREDIT,
             amount=amount,
-            available_delta=amount,
-            locked_delta=Decimal("0"),
+            deposit_delta=deposit_delta,
+            winnings_delta=winnings_delta,
+            balance_source=source,
             description=description,
             reference_type=reference_type,
             reference_id=reference_id,
@@ -291,13 +310,18 @@ class WalletService:
         metadata: Optional[dict] = None,
         commit: bool = True,
     ) -> WalletTransaction:
+        """Plain debit — ALWAYS draws from winnings_balance only. Used for
+        withdrawals (deposit money is never withdrawable). Tournament entry
+        fees must use debit_entry_fee() instead, which can draw from both
+        buckets."""
         await self.get_or_create_wallet(user)
         txn = await self._mutate(
             user_id=user.id,
             type_=WalletTransactionType.DEBIT,
             amount=amount,
-            available_delta=-amount,
-            locked_delta=Decimal("0"),
+            deposit_delta=Decimal("0"),
+            winnings_delta=-amount,
+            balance_source=WalletBalanceSource.WINNINGS,
             description=description,
             reference_type=reference_type,
             reference_id=reference_id,
@@ -322,6 +346,115 @@ class WalletService:
                 pass
         return txn
 
+    async def debit_entry_fee(
+        self,
+        user: User,
+        *,
+        amount: Decimal,
+        reference_type: Optional[str] = None,
+        reference_id: Optional[str] = None,
+        description: Optional[str] = None,
+        metadata: Optional[dict] = None,
+        commit: bool = True,
+    ) -> WalletTransaction:
+        """Tournament join charge: draws from deposit_balance first, then
+        winnings_balance for any remainder. Both bucket amounts are
+        recorded on the ledger row (deposit_delta/winnings_delta) so a
+        later cancellation can refund the exact same buckets via
+        refund_entry_fee()."""
+        await self.get_or_create_wallet(user)
+        wallet = await self.wallet_repo.get_by_user_id(user.id)
+        deposit_use = min(amount, wallet.deposit_balance) if wallet.deposit_balance > 0 else Decimal("0")
+        winnings_use = amount - deposit_use
+
+        source = (
+            WalletBalanceSource.DEPOSIT
+            if winnings_use == 0
+            else WalletBalanceSource.WINNINGS
+            if deposit_use == 0
+            else WalletBalanceSource.MIXED
+        )
+
+        txn = await self._mutate(
+            user_id=user.id,
+            type_=WalletTransactionType.DEBIT,
+            amount=amount,
+            deposit_delta=-deposit_use,
+            winnings_delta=-winnings_use,
+            balance_source=source,
+            description=description,
+            reference_type=reference_type,
+            reference_id=reference_id,
+            metadata=metadata,
+        )
+        if commit:
+            await self.session.commit()
+        return txn
+
+    async def refund_entry_fee(
+        self,
+        user: User,
+        *,
+        original_transaction_id: UUID,
+        reference_type: Optional[str] = None,
+        reference_id: Optional[str] = None,
+        description: Optional[str] = None,
+        metadata: Optional[dict] = None,
+        commit: bool = True,
+    ) -> WalletTransaction:
+        """Refunds a previous debit_entry_fee() charge back to the exact
+        same buckets it was drawn from (so deposit-money can never turn
+        into withdrawable winnings just by joining then cancelling)."""
+        original = await self.txn_repo.get_by_id(original_transaction_id)
+        if original is None:
+            raise NotFoundException("Original entry-fee transaction not found")
+
+        deposit_back = -original.deposit_delta
+        winnings_back = -original.winnings_delta
+        amount = deposit_back + winnings_back
+        if amount <= 0:
+            raise BadRequestException("Original transaction has nothing to refund")
+
+        source = (
+            WalletBalanceSource.DEPOSIT
+            if winnings_back == 0
+            else WalletBalanceSource.WINNINGS
+            if deposit_back == 0
+            else WalletBalanceSource.MIXED
+        )
+
+        txn = await self._mutate(
+            user_id=user.id,
+            type_=WalletTransactionType.REFUND,
+            amount=amount,
+            deposit_delta=deposit_back,
+            winnings_delta=winnings_back,
+            balance_source=source,
+            description=description,
+            reference_type=reference_type,
+            reference_id=reference_id,
+            related_transaction_id=original.id,
+            metadata=metadata,
+        )
+        if commit:
+            await self.session.commit()
+            try:
+                from app.models.notification import NotificationEventType
+                from app.notifications.dispatch_service import NotificationDispatchService
+
+                await NotificationDispatchService(self.session).dispatch(
+                    user=user,
+                    event_type=NotificationEventType.REFUND_COMPLETED,
+                    title="Refund completed",
+                    body=f"₹{amount} has been refunded to your wallet."
+                    + (f" ({description})" if description else ""),
+                    event_key=f"refund_completed:{txn.id}",
+                    meta_data={"transaction_id": str(txn.id)},
+                )
+            except Exception:  # noqa: BLE001
+                pass
+        return txn
+
     async def hold(
         self,
         user: User,
@@ -333,15 +466,19 @@ class WalletService:
         metadata: Optional[dict] = None,
         commit: bool = True,
     ) -> WalletTransaction:
-        """Moves funds from available -> locked. Used to reserve funds
-        (e.g. a tournament entry fee) before the outcome is known."""
+        """Moves funds from winnings -> locked. Used to reserve funds
+        before the outcome is known. Not used by the current tournament
+        entry flow (which uses debit_entry_fee instead), kept for other
+        hold-style callers (e.g. admin/legacy routes)."""
         await self.get_or_create_wallet(user)
         txn = await self._mutate(
             user_id=user.id,
             type_=WalletTransactionType.HOLD,
             amount=amount,
-            available_delta=-amount,
+            deposit_delta=Decimal("0"),
+            winnings_delta=-amount,
             locked_delta=amount,
+            balance_source=WalletBalanceSource.WINNINGS,
             status=WalletTransactionStatus.PENDING,
             description=description,
             reference_type=reference_type,
@@ -382,13 +519,16 @@ class WalletService:
         if wallet is None:
             raise NotFoundException("Wallet not found for this user")
 
-        available_delta = Decimal("0") if capture else hold_txn.amount
-        new_available = wallet.available_balance + available_delta
+        # hold() always draws from winnings_balance, so release/capture
+        # always settles against winnings_balance too.
+        winnings_delta = Decimal("0") if capture else hold_txn.amount
+        new_deposit = wallet.deposit_balance
+        new_winnings = wallet.winnings_balance + winnings_delta
         new_locked = wallet.locked_balance - hold_txn.amount
         if new_locked < 0:
             raise BadRequestException("Insufficient locked balance to release")
 
-        wallet.available_balance = new_available
+        wallet.winnings_balance = new_winnings
         wallet.locked_balance = new_locked
 
         release_txn = await self.txn_repo.create(
@@ -398,7 +538,12 @@ class WalletService:
             status=WalletTransactionStatus.SUCCESS,
             amount=hold_txn.amount,
             currency=wallet.currency,
-            available_balance_after=new_available,
+            balance_source=WalletBalanceSource.WINNINGS,
+            deposit_delta=Decimal("0"),
+            winnings_delta=winnings_delta,
+            deposit_balance_after=new_deposit,
+            winnings_balance_after=new_winnings,
+            available_balance_after=new_deposit + new_winnings,
             locked_balance_after=new_locked,
             description=description or ("Hold captured" if capture else "Hold released"),
             reference_type=hold_txn.reference_type,
@@ -425,13 +570,17 @@ class WalletService:
         metadata: Optional[dict] = None,
         commit: bool = True,
     ) -> WalletTransaction:
+        # Generic refund (e.g. withdrawal cancelled) — always credited back
+        # to winnings_balance, since debit() only ever draws from winnings.
+        # Entry-fee refunds must use refund_entry_fee() instead.
         await self.get_or_create_wallet(user)
         txn = await self._mutate(
             user_id=user.id,
             type_=WalletTransactionType.REFUND,
             amount=amount,
-            available_delta=amount,
-            locked_delta=Decimal("0"),
+            deposit_delta=Decimal("0"),
+            winnings_delta=amount,
+            balance_source=WalletBalanceSource.WINNINGS,
             description=description,
             reference_type=reference_type,
             reference_id=reference_id,
@@ -467,13 +616,16 @@ class WalletService:
         metadata: Optional[dict] = None,
         commit: bool = True,
     ) -> WalletTransaction:
+        # Admin bonuses land in winnings_balance (withdrawable), matching
+        # how promotional/bonus credit is generally expected to behave.
         await self.get_or_create_wallet(user)
         txn = await self._mutate(
             user_id=user.id,
             type_=WalletTransactionType.BONUS,
             amount=amount,
-            available_delta=amount,
-            locked_delta=Decimal("0"),
+            deposit_delta=Decimal("0"),
+            winnings_delta=amount,
+            balance_source=WalletBalanceSource.WINNINGS,
             description=description,
             reference_type=reference_type,
             reference_id=reference_id,
@@ -493,9 +645,11 @@ class WalletService:
         amount: Decimal,
         reason: str,
         admin: User,
+        source: WalletBalanceSource = WalletBalanceSource.WINNINGS,
     ) -> WalletTransaction:
         """amount > 0 credits the wallet, amount < 0 debits it. Always
-        recorded as ADMIN_ADJUSTMENT and audited via AuditService."""
+        recorded as ADMIN_ADJUSTMENT and audited via AuditService.
+        source picks which bucket is adjusted (default winnings)."""
         if admin.role not in _ADMIN_ROLES:
             raise ForbiddenException("Only admins can adjust wallet balances")
         if amount == 0:
@@ -503,14 +657,16 @@ class WalletService:
 
         await self.get_or_create_wallet(target_user)
         magnitude = abs(amount)
-        available_delta = amount  # signed: positive credits, negative debits
+        deposit_delta = amount if source == WalletBalanceSource.DEPOSIT else Decimal("0")
+        winnings_delta = amount if source == WalletBalanceSource.WINNINGS else Decimal("0")
 
         txn = await self._mutate(
             user_id=target_user.id,
             type_=WalletTransactionType.ADMIN_ADJUSTMENT,
             amount=magnitude,
-            available_delta=available_delta,
-            locked_delta=Decimal("0"),
+            deposit_delta=deposit_delta,
+            winnings_delta=winnings_delta,
+            balance_source=source,
             description=reason,
             performed_by=admin,
             metadata={"direction": "credit" if amount > 0 else "debit"},
@@ -544,17 +700,22 @@ class WalletService:
         admin: User,
         reference_type: Optional[str] = None,
         reference_id: Optional[str] = None,
+        source: WalletBalanceSource = WalletBalanceSource.WINNINGS,
     ) -> WalletTransaction:
         if admin.role not in _ADMIN_ROLES:
             raise ForbiddenException("Only admins can credit wallet balances")
         await self.get_or_create_wallet(target_user)
 
+        deposit_delta = amount if source == WalletBalanceSource.DEPOSIT else Decimal("0")
+        winnings_delta = amount if source == WalletBalanceSource.WINNINGS else Decimal("0")
+
         txn = await self._mutate(
             user_id=target_user.id,
             type_=WalletTransactionType.CREDIT,
             amount=amount,
-            available_delta=amount,
-            locked_delta=Decimal("0"),
+            deposit_delta=deposit_delta,
+            winnings_delta=winnings_delta,
+            balance_source=source,
             description=reason,
             reference_type=reference_type,
             reference_id=reference_id,
@@ -588,17 +749,22 @@ class WalletService:
         admin: User,
         reference_type: Optional[str] = None,
         reference_id: Optional[str] = None,
+        source: WalletBalanceSource = WalletBalanceSource.WINNINGS,
     ) -> WalletTransaction:
         if admin.role not in _ADMIN_ROLES:
             raise ForbiddenException("Only admins can debit wallet balances")
         await self.get_or_create_wallet(target_user)
 
+        deposit_delta = -amount if source == WalletBalanceSource.DEPOSIT else Decimal("0")
+        winnings_delta = -amount if source == WalletBalanceSource.WINNINGS else Decimal("0")
+
         txn = await self._mutate(
             user_id=target_user.id,
             type_=WalletTransactionType.DEBIT,
             amount=amount,
-            available_delta=-amount,
-            locked_delta=Decimal("0"),
+            deposit_delta=deposit_delta,
+            winnings_delta=winnings_delta,
+            balance_source=source,
             description=reason,
             reference_type=reference_type,
             reference_id=reference_id,

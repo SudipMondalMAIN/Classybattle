@@ -72,7 +72,7 @@ class TeamService:
         fee = tournament.entry_fee
         if not fee or fee <= 0:
             return
-        await self.wallet_service.debit(
+        await self.wallet_service.debit_entry_fee(
             user,
             amount=fee,
             reference_type=_WALLET_TEAM_ENTRY_REF_TYPE,

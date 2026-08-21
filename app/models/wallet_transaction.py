@@ -49,6 +49,18 @@ class WalletTransactionStatus(str, enum.Enum):
     CANCELLED = "cancelled"
 
 
+class WalletBalanceSource(str, enum.Enum):
+    """Which bucket(s) this transaction moved money into/out of.
+    Tournament-entry debits can span both (deposit drained first, then
+    winnings for the remainder), hence deposit_delta/winnings_delta are
+    tracked separately rather than a single enum being fully sufficient —
+    this enum is a convenience label for the dominant/primary bucket."""
+
+    DEPOSIT = "deposit"
+    WINNINGS = "winnings"
+    MIXED = "mixed"
+
+
 class WalletTransaction(Base):
     """Immutable ledger entry. Does NOT inherit BaseModel's soft-delete /
     updated_at mixins — ledger rows are append-only and never soft
@@ -89,8 +101,22 @@ class WalletTransaction(Base):
     amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
     currency: Mapped[str] = mapped_column(String(3), default="INR", server_default="INR", nullable=False)
 
+    # Which bucket(s) this transaction moved. See WalletBalanceSource.
+    balance_source: Mapped[WalletBalanceSource] = mapped_column(
+        str_enum(WalletBalanceSource, "wallet_balance_source"),
+        default=WalletBalanceSource.WINNINGS,
+        nullable=False,
+    )
+    # Signed amounts actually moved in/out of each bucket by this row.
+    # amount == abs(deposit_delta) + abs(winnings_delta) for split entry-fee debits.
+    deposit_delta: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=0, server_default="0", nullable=False)
+    winnings_delta: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=0, server_default="0", nullable=False)
+
     # Balance snapshot *after* this transaction was applied — makes the
     # ledger self-auditing without replaying every prior row.
+    deposit_balance_after: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
+    winnings_balance_after: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
+    # Backward-compat convenience snapshot = deposit_balance_after + winnings_balance_after.
     available_balance_after: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
     locked_balance_after: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
 

@@ -257,7 +257,7 @@ class ParticipantService:
         completed — the caller's transaction is rolled back as a whole by
         the DB-session dependency, so no partial registration is left
         behind (atomic registration + payment)."""
-        txn = await self.wallet_service.debit(
+        txn = await self.wallet_service.debit_entry_fee(
             user,
             amount=tournament.entry_fee,
             reference_type=_WALLET_ENTRY_FEE_REF_TYPE,
@@ -283,10 +283,14 @@ class ParticipantService:
             return
         if not participant.entry_fee_paid or participant.entry_fee_paid <= 0:
             return
+        if not participant.payment_reference:
+            return
 
-        await self.wallet_service.refund(
+        from uuid import UUID as _UUID
+
+        await self.wallet_service.refund_entry_fee(
             participant.user,
-            amount=participant.entry_fee_paid,
+            original_transaction_id=_UUID(participant.payment_reference),
             reference_type=_WALLET_ENTRY_FEE_REFUND_REF_TYPE,
             reference_id=str(participant.id),
             description=reason,

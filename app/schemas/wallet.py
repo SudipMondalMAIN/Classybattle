@@ -8,7 +8,11 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.models.wallet_transaction import WalletTransactionStatus, WalletTransactionType
+from app.models.wallet_transaction import (
+    WalletBalanceSource,
+    WalletTransactionStatus,
+    WalletTransactionType,
+)
 
 
 # ----------------------------------------------------------------------
@@ -19,6 +23,9 @@ class WalletRead(BaseModel):
 
     id: UUID
     user_id: UUID
+    deposit_balance: Decimal
+    winnings_balance: Decimal
+    # Backward-compat: deposit_balance + winnings_balance.
     available_balance: Decimal
     locked_balance: Decimal
     currency: str
@@ -44,6 +51,11 @@ class WalletTransactionRead(BaseModel):
     status: WalletTransactionStatus
     amount: Decimal
     currency: str
+    balance_source: WalletBalanceSource
+    deposit_delta: Decimal
+    winnings_delta: Decimal
+    deposit_balance_after: Decimal
+    winnings_balance_after: Decimal
     available_balance_after: Decimal
     locked_balance_after: Decimal
     description: Optional[str] = None
