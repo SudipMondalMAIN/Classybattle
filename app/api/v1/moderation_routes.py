@@ -200,6 +200,16 @@ async def list_user_actions(
     current_user: User = Depends(get_current_active_verified_user),
     session: AsyncSession = Depends(get_db_session),
 ):
+    """A user may view their own moderation history; only an admin may
+    view another user's (this includes ban/suspension reasons and who
+    issued them, so it must not be exposed to arbitrary users)."""
+    from app.core.exceptions import ForbiddenException
+    from app.models.user import UserRole
+
+    is_admin = current_user.role in (UserRole.ADMIN, UserRole.SUPER_ADMIN)
+    if user_id != current_user.id and not is_admin:
+        raise ForbiddenException("You do not have permission to view this user's moderation history")
+
     service = ModerationService(session)
     items = await service.list_actions_for_user(user_id)
     return [ModerationActionRead.model_validate(a) for a in items]

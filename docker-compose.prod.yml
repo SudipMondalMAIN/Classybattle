@@ -18,6 +18,10 @@ services:
       APP_ENV: production
       APP_DEBUG: "false"
 
+  redis:
+    restart: always
+    ports: []
+
   db:
     restart: always
     ports: []

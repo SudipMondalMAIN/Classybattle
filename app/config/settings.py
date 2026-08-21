@@ -72,6 +72,14 @@ class Settings(BaseSettings):
     RATE_LIMIT_PER_MINUTE: int = 60
     AUTH_RATE_LIMIT: str = "10/minute"
     OTP_RATE_LIMIT: str = "5/minute"
+    # Shared storage backend for the rate limiter. Required in production
+    # whenever the app runs with more than one uvicorn worker (see
+    # docker-compose.prod.yml's --workers 4) — without it, each worker
+    # keeps its own separate in-memory counters, so the *effective*
+    # per-IP limit is actually (configured limit x worker count).
+    # Leave empty to fall back to in-memory storage (fine for local dev
+    # with a single worker only).
+    REDIS_URL: str = ""
 
     # ---------------- PROXY / CLIENT IP ----------------
     # Number of trusted reverse-proxy hops in front of the app (e.g. Render's
