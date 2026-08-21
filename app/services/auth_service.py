@@ -4,6 +4,7 @@ token issuance/refresh, and password reset flows.
 """
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
+import random
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -33,6 +34,7 @@ from app.repositories.user_repository import UserRepository
 from app.schemas.auth import LoginRequest, ResetPasswordRequest, SignupRequest
 from app.services.otp_service import OTPService
 from app.services.security_service import SecurityService
+from app.utils.avatars import PREDEFINED_AVATARS
 
 logger = get_logger(__name__)
 
@@ -123,6 +125,7 @@ class AuthService:
             is_email_verified=True,
             is_active=True,
             player_uid=await self._generate_unique_player_uid(),
+            avatar_id=random.choice(PREDEFINED_AVATARS),
         )
         await self.session.commit()
 
