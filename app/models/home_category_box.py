@@ -22,7 +22,9 @@ from app.database.types import str_enum
 
 class HomeCategoryBoxType(str, enum.Enum):
     SOLO = "solo"
+    DUO = "duo"
     SQUAD = "squad"
+    FREE = "free"
     CUSTOM = "custom"
 
 
