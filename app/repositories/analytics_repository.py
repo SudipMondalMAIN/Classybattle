@@ -83,7 +83,7 @@ class AnalyticsRepository:
 
     async def wallet_summary(self) -> dict[str, Decimal]:
         stmt = select(
-            func.coalesce(func.sum(Wallet.available_balance), 0),
+            func.coalesce(func.sum(Wallet.deposit_balance + Wallet.winnings_balance), 0),
             func.coalesce(func.sum(Wallet.locked_balance), 0),
         ).where(Wallet.deleted_at.is_(None))
         available, locked = (await self.session.execute(stmt)).one()
