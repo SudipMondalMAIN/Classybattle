@@ -76,6 +76,19 @@ async def generate_all_today(
     return {"generated_for_schedules": len(results), "total_matches": sum(len(v) for v in results.values())}
 
 
+@router.delete("/schedules/{schedule_id}", status_code=204)
+async def delete_schedule(
+    schedule_id: UUID,
+    current_user: User = Depends(require_admin),
+    session: AsyncSession = Depends(get_db_session),
+):
+    """Admin: soft-delete a schedule template. Already-generated match
+    slots for that day are unaffected; the template just stops appearing
+    in listings and stops generating any future slots."""
+    service = ScheduleService(session)
+    await service.delete_schedule(schedule_id, current_user)
+
+
 @router.get("/schedules/{schedule_id}", response_model=ScheduleRead)
 async def get_schedule(
     schedule_id: UUID,

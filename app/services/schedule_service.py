@@ -186,6 +186,17 @@ class ScheduleService:
     async def get_schedule(self, schedule_id: UUID) -> Tournament:
         return await self._get_schedule(schedule_id)
 
+    async def delete_schedule(self, schedule_id: UUID, current_user: User) -> None:
+        """Admin: soft-delete a schedule template. Already-generated match
+        slots for past/ongoing days are left untouched -- this only stops
+        the template from showing up in listings and from generating any
+        future slots (generate_all_today/generate_slots skip soft-deleted
+        rows via TournamentRepository.get_by_id / list_active_recurring_schedules,
+        which both exclude deleted_at IS NOT NULL rows by default)."""
+        schedule = await self._get_schedule(schedule_id)
+        await self.repo.soft_delete(schedule)
+        await self.session.commit()
+
     async def list_schedules(
         self, *, game_id: Optional[UUID] = None, active_only: bool = True
     ) -> Sequence[Tournament]:
