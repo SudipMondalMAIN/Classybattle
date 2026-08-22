@@ -599,7 +599,7 @@ class LeaderboardService:
         )
         result = await self.session.execute(stmt)
         briefs = {
-            row.id: {"id": row.id, "full_name": row.full_name, "player_uid": row.player_uid, "avatar_url": row.avatar_url}
+            row.id: {"id": row.id, "full_name": row.full_name, "player_uid": row.player_uid, "avatar_id": row.avatar_url}
             for row in result.all()
         }
         for r in rows:

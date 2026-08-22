@@ -134,6 +134,25 @@ class SupportChatService:
         await self.session.commit()
 
         await manager.broadcast_to_session(chat_session.id, _message_payload(message))
+
+        try:
+            from app.models.notification import NotificationEventType
+            from app.models.user import User as _User
+            from app.notifications.dispatch_service import NotificationDispatchService
+
+            recipient = await self.session.get(_User, chat_session.user_id)
+            if recipient is not None:
+                await NotificationDispatchService(self.session).dispatch(
+                    user=recipient,
+                    event_type=NotificationEventType.GENERAL,
+                    title="New message from support",
+                    body=content[:200],
+                    event_key=f"support_chat_message:{message.id}",
+                    meta_data={"session_id": str(chat_session.id)},
+                )
+        except Exception:  # noqa: BLE001
+            pass
+
         return message
 
     # ------------------------------------------------------------------

@@ -689,6 +689,28 @@ class WalletService:
         )
 
         await self.session.commit()
+
+        try:
+            from app.models.notification import NotificationEventType
+            from app.notifications.dispatch_service import NotificationDispatchService
+
+            event_type = (
+                NotificationEventType.WALLET_CREDITED
+                if amount > 0
+                else NotificationEventType.WALLET_DEBITED
+            )
+            await NotificationDispatchService(self.session).dispatch(
+                user=target_user,
+                event_type=event_type,
+                title="Wallet credited" if amount > 0 else "Wallet debited",
+                body=f"₹{magnitude} has been {'credited to' if amount > 0 else 'debited from'} your wallet."
+                + (f" ({reason})" if reason else ""),
+                event_key=f"wallet_admin_adjustment:{txn.id}",
+                meta_data={"transaction_id": str(txn.id)},
+            )
+        except Exception:  # noqa: BLE001
+            pass
+
         return txn
 
     async def admin_credit(
@@ -738,6 +760,23 @@ class WalletService:
         )
 
         await self.session.commit()
+
+        try:
+            from app.models.notification import NotificationEventType
+            from app.notifications.dispatch_service import NotificationDispatchService
+
+            await NotificationDispatchService(self.session).dispatch(
+                user=target_user,
+                event_type=NotificationEventType.WALLET_CREDITED,
+                title="Wallet credited",
+                body=f"₹{amount} has been credited to your wallet."
+                + (f" ({reason})" if reason else ""),
+                event_key=f"wallet_admin_credit:{txn.id}",
+                meta_data={"transaction_id": str(txn.id)},
+            )
+        except Exception:  # noqa: BLE001
+            pass
+
         return txn
 
     async def admin_debit(
