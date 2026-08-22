@@ -573,17 +573,23 @@ class LeaderboardService:
             raise NotFoundException("No statistics found for this team yet")
         return stats
 
-    async def top_players(self, *, page: int, page_size: int) -> tuple[Sequence[PlayerStatistics], int]:
+    async def top_players(
+        self, *, page: int, page_size: int
+    ) -> tuple[Sequence[PlayerStatistics], int, dict]:
         skip = (page - 1) * page_size
         rows = await self.player_stats_repo.top(skip=skip, limit=page_size)
         total = await self.player_stats_repo.count_all()
-        await self._attach_user_briefs(rows)
-        return rows, total
+        briefs = await self._fetch_user_briefs(rows)
+        return rows, total, briefs
 
-    async def _attach_user_briefs(self, rows: Sequence[PlayerStatistics]) -> None:
-        """Attaches a lightweight `.user` (full_name, player_uid, avatar_url)
-        attribute onto each row so the leaderboard can show real names and
-        avatars without the Flutter app making one request per player."""
+    async def _fetch_user_briefs(self, rows: Sequence[PlayerStatistics]) -> dict:
+        """Looks up a lightweight (full_name, player_uid, avatar_id) brief per
+        row.user_id so the leaderboard can show real names and avatars
+        without the Flutter app making one request per player. Returned
+        as a plain dict keyed by user_id -- NOT attached to the ORM rows,
+        since PlayerStatistics already has a real `user` relationship
+        (see the model) and overwriting that attribute with a dict
+        breaks SQLAlchemy's attribute machinery."""
         from sqlalchemy import select as _select
 
         from app.models.social import PlayerProfile
@@ -591,19 +597,17 @@ class LeaderboardService:
 
         user_ids = [r.user_id for r in rows]
         if not user_ids:
-            return
+            return {}
         stmt = (
             _select(User.id, User.full_name, User.player_uid, PlayerProfile.avatar_url)
             .outerjoin(PlayerProfile, PlayerProfile.user_id == User.id)
             .where(User.id.in_(user_ids))
         )
         result = await self.session.execute(stmt)
-        briefs = {
+        return {
             row.id: {"id": row.id, "full_name": row.full_name, "player_uid": row.player_uid, "avatar_id": row.avatar_url}
             for row in result.all()
         }
-        for r in rows:
-            setattr(r, "user", briefs.get(r.user_id))
 
     async def top_teams(self, *, page: int, page_size: int) -> tuple[Sequence[TeamStatistics], int]:
         skip = (page - 1) * page_size

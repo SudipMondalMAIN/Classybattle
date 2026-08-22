@@ -39,10 +39,18 @@ async def top_players(
     page_size: int = Query(20, ge=1, le=100),
     session: AsyncSession = Depends(get_db_session),
 ):
+    from app.schemas.leaderboard import LeaderboardUserBrief
+
     service = LeaderboardService(session)
-    rows, total = await service.top_players(page=page, page_size=page_size)
+    rows, total, briefs = await service.top_players(page=page, page_size=page_size)
+    items = []
+    for r in rows:
+        item = PlayerStatisticsRead.model_validate(r)
+        brief = briefs.get(r.user_id)
+        item.user = LeaderboardUserBrief(**brief) if brief else None
+        items.append(item)
     return PaginatedPlayerStatistics(
-        items=[PlayerStatisticsRead.model_validate(r) for r in rows],
+        items=items,
         total=total, page=page, page_size=page_size, total_pages=_pages(total, page_size),
     )
 
