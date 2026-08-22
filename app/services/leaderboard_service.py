@@ -577,7 +577,33 @@ class LeaderboardService:
         skip = (page - 1) * page_size
         rows = await self.player_stats_repo.top(skip=skip, limit=page_size)
         total = await self.player_stats_repo.count_all()
+        await self._attach_user_briefs(rows)
         return rows, total
+
+    async def _attach_user_briefs(self, rows: Sequence[PlayerStatistics]) -> None:
+        """Attaches a lightweight `.user` (full_name, player_uid, avatar_url)
+        attribute onto each row so the leaderboard can show real names and
+        avatars without the Flutter app making one request per player."""
+        from sqlalchemy import select as _select
+
+        from app.models.social import PlayerProfile
+        from app.models.user import User
+
+        user_ids = [r.user_id for r in rows]
+        if not user_ids:
+            return
+        stmt = (
+            _select(User.id, User.full_name, User.player_uid, PlayerProfile.avatar_url)
+            .outerjoin(PlayerProfile, PlayerProfile.user_id == User.id)
+            .where(User.id.in_(user_ids))
+        )
+        result = await self.session.execute(stmt)
+        briefs = {
+            row.id: {"id": row.id, "full_name": row.full_name, "player_uid": row.player_uid, "avatar_url": row.avatar_url}
+            for row in result.all()
+        }
+        for r in rows:
+            setattr(r, "user", briefs.get(r.user_id))
 
     async def top_teams(self, *, page: int, page_size: int) -> tuple[Sequence[TeamStatistics], int]:
         skip = (page - 1) * page_size

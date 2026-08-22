@@ -11,11 +11,21 @@ from pydantic import BaseModel, ConfigDict
 from app.models.leaderboard import LeaderboardPeriodType, RankingScope
 
 
+class LeaderboardUserBrief(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    full_name: str
+    player_uid: str
+    avatar_url: Optional[str] = None
+
+
 class PlayerStatisticsRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
     user_id: UUID
+    user: Optional[LeaderboardUserBrief] = None
     matches_played: int
     matches_won: int
     matches_lost: int
