@@ -75,6 +75,7 @@ async def _build_profile_read(
     model_cls,
     *,
     reveal_contact: bool = False,
+    friendship_id: Optional[UUID] = None,
 ):
     stats_summary = None
     if profile.show_stats:
@@ -116,13 +117,14 @@ async def _build_profile_read(
     profile_fields = {
         name: getattr(profile, name)
         for name in model_cls.model_fields
-        if name not in ("user", "stats", "relationship_status", "is_following")
+        if name not in ("user", "stats", "relationship_status", "is_following", "friendship_id")
     }
     data = model_cls.model_validate(profile_fields).model_dump()
     data["user"] = user_summary
     data["stats"] = stats_summary
     data["relationship_status"] = relationship
     data["is_following"] = is_following is not None
+    data["friendship_id"] = friendship_id
     return model_cls(**data)
 
 
@@ -228,10 +230,12 @@ async def get_player_profile(
     session: AsyncSession = Depends(get_db_session),
 ):
     service = ProfileService(session)
-    profile, target_user, relationship = await service.get_profile_for_viewer(
+    profile, target_user, relationship, friendship_id = await service.get_profile_for_viewer(
         target_user_id=user_id, viewer=viewer
     )
-    return await _build_profile_read(profile, target_user, relationship, session, viewer, ProfileRead)
+    return await _build_profile_read(
+        profile, target_user, relationship, session, viewer, ProfileRead, friendship_id=friendship_id
+    )
 
 
 @router.get("/search", response_model=PaginatedProfiles)

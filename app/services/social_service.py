@@ -119,8 +119,16 @@ class ProfileService:
 
     async def get_profile_for_viewer(
         self, *, target_user_id: UUID, viewer: Optional[User]
-    ) -> tuple[PlayerProfile, User, str]:
-        """Returns (profile, user, relationship_status). Enforces visibility."""
+    ) -> tuple[PlayerProfile, User, str, Optional[UUID]]:
+        """Returns (profile, user, relationship_status, friendship_id).
+        Enforces visibility.
+
+        relationship_status is one of self/friend/pending/incoming/blocked/none.
+        'pending' means the viewer sent the (still-open) request; 'incoming'
+        means the target user sent it to the viewer, who can accept/reject it.
+        friendship_id is set whenever relationship_status is
+        friend/pending/incoming, so the client can act on it directly.
+        """
         target_user = await self.user_repo.get_by_id(target_user_id)
         if target_user is None:
             raise NotFoundException("Player not found")
@@ -131,6 +139,7 @@ class ProfileService:
             await self.session.commit()
 
         relationship = "none"
+        friendship_id: Optional[UUID] = None
         if viewer is not None and viewer.id == target_user_id:
             relationship = "self"
         elif viewer is not None:
@@ -140,8 +149,13 @@ class ProfileService:
                 existing = await self.friend_repo.get_between(viewer.id, target_user_id)
                 if existing is not None and existing.status == FriendshipStatus.ACCEPTED:
                     relationship = "friend"
+                    friendship_id = existing.id
                 elif existing is not None and existing.status == FriendshipStatus.PENDING:
-                    relationship = "pending"
+                    if existing.requester_id == viewer.id:
+                        relationship = "pending"
+                    else:
+                        relationship = "incoming"
+                    friendship_id = existing.id
 
         if relationship not in ("self", "friend") and profile.visibility == ProfileVisibility.PRIVATE:
             raise ForbiddenException("This profile is private")
@@ -151,7 +165,7 @@ class ProfileService:
         ):
             raise ForbiddenException("This profile is only visible to friends")
 
-        return profile, target_user, relationship
+        return profile, target_user, relationship, friendship_id
 
     async def is_following(self, viewer_id: Optional[UUID], target_user_id: UUID) -> bool:
         if viewer_id is None:

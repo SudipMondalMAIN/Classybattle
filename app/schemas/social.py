@@ -84,7 +84,19 @@ class ProfileRead(BaseModel):
     user: Optional[PublicUserSummary] = None
     stats: Optional[PlayerStatsSummary] = None
     relationship_status: Optional[str] = Field(
-        None, description="Viewer's relationship to this profile: self/friend/pending/blocked/none"
+        None,
+        description=(
+            "Viewer's relationship to this profile: self/friend/pending/"
+            "incoming/blocked/none. 'pending' = viewer sent a request that's "
+            "awaiting response; 'incoming' = the target sent the viewer a "
+            "request that's awaiting the viewer's response."
+        ),
+    )
+    friendship_id: Optional[UUID] = Field(
+        None,
+        description="Id of the friendship row when relationship_status is "
+        "friend/pending/incoming -- lets the client accept/reject/cancel "
+        "directly from the profile screen.",
     )
     is_following: Optional[bool] = None
 
