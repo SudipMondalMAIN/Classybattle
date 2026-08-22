@@ -93,7 +93,14 @@ class NotificationDispatchService:
                     return existing
 
             if send_push and prefs.push_enabled:
-                await self._send_push_best_effort(user.id, title, body, event_type)
+                await self._send_push_best_effort(
+                    user.id,
+                    title,
+                    body,
+                    event_type,
+                    notification_id=notification.id if notification else None,
+                    meta_data=meta_data,
+                )
 
             if send_email and prefs.email_enabled and getattr(user, "email", None):
                 await self._send_email_best_effort(user.email, title, body)
@@ -145,14 +152,28 @@ class NotificationDispatchService:
     # Best-effort channel fan-out helpers
     # ------------------------------------------------------------------
     async def _send_push_best_effort(
-        self, user_id: UUID, title: str, body: str, event_type: NotificationEventType
+        self,
+        user_id: UUID,
+        title: str,
+        body: str,
+        event_type: NotificationEventType,
+        notification_id: Optional[UUID] = None,
+        meta_data: Optional[dict] = None,
     ) -> None:
         try:
             tokens = await self.device_repo.list_active_for_user(user_id)
+            # FCM data payloads must be Dict[str, str] -- flatten meta_data
+            # (tournament_id, transaction_id, etc.) so the app can navigate
+            # to the right screen when the user taps the notification.
+            data: dict[str, str] = {"event_type": event_type.value}
+            if notification_id is not None:
+                data["notification_id"] = str(notification_id)
+            if meta_data:
+                for key, value in meta_data.items():
+                    if value is not None:
+                        data[str(key)] = str(value)
             for token in tokens:
-                await push_service.send_push(
-                    token.fcm_token, title, body, {"event_type": event_type.value}
-                )
+                await push_service.send_push(token.fcm_token, title, body, data)
         except Exception as exc:  # noqa: BLE001
             logger.warning("notification_push_failed", user_id=str(user_id), error=str(exc))
 
