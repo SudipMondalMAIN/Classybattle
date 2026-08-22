@@ -269,6 +269,8 @@ class TournamentListItem(BaseModel):
     entry_fee: Decimal
     prize_pool: Decimal
     prize_type: PrizeType
+    per_kill_amount: Optional[Decimal] = None
+    win_amount: Optional[Decimal] = None
     max_players: int
     current_players: int
     status: TournamentStatus

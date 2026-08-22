@@ -17,7 +17,7 @@ class LeaderboardUserBrief(BaseModel):
     id: UUID
     full_name: str
     player_uid: str
-    avatar_url: Optional[str] = None
+    avatar_id: Optional[str] = None
 
 
 class PlayerStatisticsRead(BaseModel):
