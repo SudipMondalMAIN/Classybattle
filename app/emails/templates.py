@@ -41,3 +41,14 @@ def password_reset_otp_template(full_name: str, otp: str, expiry_minutes: int) -
       <p>This code expires in {expiry_minutes} minutes.</p>
     """
     return _base_template("Reset Your Password", full_name, body)
+
+
+def login_otp_template(full_name: str, otp: str, expiry_minutes: int) -> str:
+    body = f"""
+      <p>Use the code below to log in to your ClassyBattle account:</p>
+      <div style="font-size: 32px; font-weight: bold; letter-spacing: 6px; color: #ffcc00; text-align: center; margin: 24px 0;">
+        {otp}
+      </div>
+      <p>This code expires in {expiry_minutes} minutes.</p>
+    """
+    return _base_template("Your Login Code", full_name, body)

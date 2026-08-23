@@ -11,6 +11,7 @@ from app.models.otp import OTPPurpose
 from app.schemas.auth import (
     AccessTokenResponse,
     ForgotPasswordRequest,
+    LoginOTPRequest,
     LoginRequest,
     RefreshTokenRequest,
     ResendOTPRequest,
@@ -18,6 +19,7 @@ from app.schemas.auth import (
     SignupInitResponse,
     SignupRequest,
     TokenResponse,
+    VerifyLoginOTPRequest,
     VerifyResetOTPRequest,
     VerifySignupOTPRequest,
 )
@@ -77,6 +79,35 @@ async def login(
 ):
     service = AuthService(session)
     user, access_token, refresh_token = await service.login(payload)
+    return TokenResponse(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        user=UserRead.model_validate(user),
+    )
+
+
+@router.post("/login/otp/request", response_model=MessageResponse)
+@limiter.limit(settings.LOGIN_OTP_RATE_LIMIT)
+async def request_login_otp(
+    request: Request, payload: LoginOTPRequest, session: AsyncSession = Depends(get_db_session)
+):
+    """Step 1 of OTP login: send a login OTP to this email, capped at
+    settings.LOGIN_OTP_RATE_LIMIT (2 per 5 minutes per IP)."""
+    service = AuthService(session)
+    await service.initiate_login_otp(payload.email)
+    return MessageResponse(
+        message="If an account exists for this email, a login OTP has been sent."
+    )
+
+
+@router.post("/login/otp/verify", response_model=TokenResponse)
+@limiter.limit(settings.LOGIN_OTP_RATE_LIMIT)
+async def verify_login_otp(
+    request: Request, payload: VerifyLoginOTPRequest, session: AsyncSession = Depends(get_db_session)
+):
+    """Step 2 of OTP login: verify the OTP and issue tokens."""
+    service = AuthService(session)
+    user, access_token, refresh_token = await service.verify_login_otp(payload.email, payload.otp)
     return TokenResponse(
         access_token=access_token,
         refresh_token=refresh_token,

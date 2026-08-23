@@ -7,7 +7,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 from app.config.settings import settings
 from app.core.exceptions import ExternalServiceException
 from app.core.logging import get_logger
-from app.emails.templates import otp_email_template, password_reset_otp_template
+from app.emails.templates import login_otp_template, otp_email_template, password_reset_otp_template
 
 logger = get_logger(__name__)
 
@@ -61,6 +61,10 @@ class EmailService:
     async def send_password_reset_otp(self, to_email: str, full_name: str, otp: str, expiry_minutes: int) -> None:
         html = password_reset_otp_template(full_name=full_name, otp=otp, expiry_minutes=expiry_minutes)
         await self._send(to_email, "Reset your ClassyBattle password", html)
+
+    async def send_login_otp(self, to_email: str, full_name: str, otp: str, expiry_minutes: int) -> None:
+        html = login_otp_template(full_name=full_name, otp=otp, expiry_minutes=expiry_minutes)
+        await self._send(to_email, "Your ClassyBattle login code", html)
 
     async def send_notification_email(self, to_email: str, subject: str, body: str) -> None:
         html = f"""

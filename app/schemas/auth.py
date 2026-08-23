@@ -54,6 +54,20 @@ class ResendOTPRequest(BaseModel):
     purpose: str = Field(..., pattern="^(signup_verification|password_reset)$")
 
 
+class LoginOTPRequest(BaseModel):
+    """Step 1 of OTP login: just the email — sends an OTP if a
+    verified account exists. Response is deliberately generic either
+    way (see AuthService.initiate_login_otp) so this can't be used to
+    enumerate registered emails."""
+
+    email: EmailStr
+
+
+class VerifyLoginOTPRequest(BaseModel):
+    email: EmailStr
+    otp: str = Field(..., min_length=4, max_length=8)
+
+
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str = Field(..., min_length=1)

@@ -85,6 +85,7 @@ class Settings(BaseSettings):
     RATE_LIMIT_PER_MINUTE: int = 60
     AUTH_RATE_LIMIT: str = "10/minute"
     OTP_RATE_LIMIT: str = "5/minute"
+    LOGIN_OTP_RATE_LIMIT: str = "2/5minute"
     # Shared storage backend for the rate limiter. Required in production
     # whenever the app runs with more than one uvicorn worker (see
     # docker-compose.prod.yml's --workers 4) — without it, each worker

@@ -233,6 +233,73 @@ class AuthService:
         return user, access_token, refresh_token
 
     # ------------------------------------------------------------------
+    # OTP LOGIN
+    # ------------------------------------------------------------------
+    async def initiate_login_otp(self, email: str) -> None:
+        """Step 1 of OTP login: send a LOGIN-purpose OTP if a verified,
+        active account exists for this email. Deliberately silent on
+        "no such account" (same pattern as forgot_password) so this
+        endpoint can't be used to check which emails are registered.
+        Locked/deactivated accounts are also silently skipped -- OTP
+        login must not become a side-channel that bypasses an account
+        lock the password path already enforces.
+        """
+        email = email.lower()
+        user = await self.user_repo.get_by_email(email)
+        if user is None or not user.is_email_verified or not user.is_active:
+            logger.info("login_otp_skipped", email=email, reason="no_eligible_account")
+            return
+
+        security_service = SecurityService(self.session)
+        if await security_service.is_locked(user.id):
+            logger.info("login_otp_skipped", email=email, reason="account_locked")
+            return
+
+        otp_code = await self.otp_service.generate_and_store_otp(email, OTPPurpose.LOGIN)
+        await self.session.commit()
+
+        await email_service.send_login_otp(
+            to_email=email,
+            full_name=user.full_name,
+            otp=otp_code,
+            expiry_minutes=settings.OTP_EXPIRY_MINUTES,
+        )
+
+    async def verify_login_otp(self, email: str, otp_code: str) -> tuple[User, str, str]:
+        """Step 2 of OTP login: verify the OTP and issue tokens, same
+        end state as a successful password login."""
+        email = email.lower()
+        security_service = SecurityService(self.session)
+        client_ip = get_client_ip()
+
+        user = await self.user_repo.get_by_email(email)
+        if user is None:
+            raise InvalidCredentialsException()
+
+        if not user.is_email_verified:
+            raise UnauthorizedException("Please verify your email before logging in")
+        if not user.is_active:
+            raise UnauthorizedException("This account has been deactivated")
+        if await security_service.is_locked(user.id):
+            raise UnauthorizedException("This account has been locked. Please contact support.")
+
+        # Any failure here (wrong/expired/exhausted OTP) raises OTPException
+        # and propagates as-is -- no need to duplicate SecurityService's
+        # login_attempt bookkeeping, since that's specifically about
+        # password brute-forcing, not OTP guessing (which OTPService's
+        # own attempts/expiry limits already cover).
+        await self.otp_service.verify_otp(email, OTPPurpose.LOGIN, otp_code)
+
+        access_token, refresh_token = await self._issue_tokens(user)
+        await security_service.record_login_attempt(
+            user=user, email_attempted=email, success=True, ip_address=client_ip
+        )
+        await self.session.commit()
+
+        logger.info("user_login_otp", user_id=str(user.id))
+        return user, access_token, refresh_token
+
+    # ------------------------------------------------------------------
     # TOKENS
     # ------------------------------------------------------------------
     async def _issue_tokens(self, user: User) -> tuple[str, str]:

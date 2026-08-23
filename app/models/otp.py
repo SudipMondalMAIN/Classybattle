@@ -16,6 +16,7 @@ from app.database.types import PortableJSONB, str_enum
 class OTPPurpose(str, enum.Enum):
     SIGNUP_VERIFICATION = "signup_verification"
     PASSWORD_RESET = "password_reset"
+    LOGIN = "login"
 
 
 class OTP(BaseModel):
