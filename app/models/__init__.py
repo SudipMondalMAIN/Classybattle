@@ -4,6 +4,7 @@ via Base.metadata.
 """
 from app.database.base import Base
 from app.models.app_version import AppPlatform, AppVersion
+from app.models.telegram_chat import TelegramAuthorizedChat
 from app.models.achievement import (
     Achievement,
     AchievementComparison,

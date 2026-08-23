@@ -265,6 +265,14 @@ class PaymentService:
 
         await self.session.commit()
         await self.session.refresh(payment_request)
+
+        try:
+            from app.telegram_bot.service import TelegramBotService
+
+            await TelegramBotService(self.session).notify_deposit_submitted(payment_request, user)
+        except Exception:  # noqa: BLE001 - never block the deposit itself
+            pass
+
         return payment_request
 
     async def cancel_own_request(

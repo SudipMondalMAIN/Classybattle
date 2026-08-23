@@ -65,6 +65,19 @@ class Settings(BaseSettings):
     FIREBASE_CREDENTIALS_PATH: str = "firebase-service-account.json"
     FIREBASE_PROJECT_ID: str = ""
 
+    # ---------------- TELEGRAM ADMIN BOT ----------------
+    # Leave TELEGRAM_BOT_TOKEN empty to disable the bot entirely (no
+    # startup error, webhook route just responds 503).
+    TELEGRAM_BOT_TOKEN: str = ""
+    # Code a chat must send via /start <code> to become authorized.
+    TELEGRAM_AUTH_CODE: str = "CB1245"
+    # Secret path segment mixed into the webhook URL so it can't be
+    # guessed/spammed by outsiders (Telegram doesn't sign requests).
+    TELEGRAM_WEBHOOK_SECRET: str = ""
+    # Email of the admin user the bot acts as when it approves/rejects
+    # deposits via inline buttons.
+    TELEGRAM_BOT_ADMIN_EMAIL: str = ""
+
     # ---------------- CORS ----------------
     CORS_ORIGINS: List[str] = ["*"]
 

@@ -102,6 +102,13 @@ class WithdrawalService:
         except Exception:  # noqa: BLE001 - never block the request itself
             pass
 
+        try:
+            from app.telegram_bot.service import TelegramBotService
+
+            await TelegramBotService(self.session).notify_withdrawal_submitted(withdrawal, user)
+        except Exception:  # noqa: BLE001 - never block the request itself
+            pass
+
         return withdrawal
 
     async def get_owned(self, user: User, withdrawal_id: UUID) -> WithdrawalRequest:

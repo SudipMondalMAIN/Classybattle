@@ -12,6 +12,7 @@ from app.api.v1.banner_routes import router as banner_router
 from app.api.v1.custom_match_claim_routes import router as custom_match_claim_router
 from app.api.v1.support_chat_routes import router as support_chat_router
 from app.api.v1.support_chat_ws_routes import router as support_chat_ws_router
+from app.api.v1.telegram_routes import router as telegram_router
 from app.api.v1.security_routes import router as security_router
 from app.api.v1.auth_routes import router as auth_router
 from app.api.v1.game_mode_routes import router as game_mode_router
@@ -73,3 +74,4 @@ api_v1_router.include_router(home_category_box_router)
 api_v1_router.include_router(custom_match_claim_router)
 api_v1_router.include_router(support_chat_router)
 api_v1_router.include_router(support_chat_ws_router)
+api_v1_router.include_router(telegram_router)
