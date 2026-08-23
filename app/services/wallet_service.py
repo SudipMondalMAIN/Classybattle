@@ -299,6 +299,96 @@ class WalletService:
                 pass
         return txn
 
+    async def create_pending_deposit(
+        self,
+        user: User,
+        *,
+        amount: Decimal,
+        reference_type: str,
+        reference_id: str,
+        description: Optional[str] = None,
+        metadata: Optional[dict] = None,
+    ) -> WalletTransaction:
+        """Write a PENDING ledger row for a deposit awaiting admin review,
+        so it shows up in the user's transaction history right away.
+        Deliberately does NOT touch the wallet balance — that only
+        happens in settle_pending_deposit(), when an admin approves.
+        """
+        if amount <= 0:
+            raise ValidationException("Transaction amount must be greater than zero")
+
+        existing = await self.txn_repo.get_by_reference(
+            reference_type, reference_id, WalletTransactionType.CREDIT
+        )
+        if existing is not None:
+            raise ConflictException(
+                f"A 'credit' transaction already exists for {reference_type}:{reference_id}"
+            )
+
+        wallet = await self.get_or_create_wallet(user)
+        txn = await self.txn_repo.create(
+            wallet_id=wallet.id,
+            user_id=user.id,
+            type=WalletTransactionType.CREDIT,
+            status=WalletTransactionStatus.PENDING,
+            amount=amount,
+            currency=wallet.currency,
+            balance_source=WalletBalanceSource.DEPOSIT,
+            deposit_delta=Decimal("0"),
+            winnings_delta=Decimal("0"),
+            deposit_balance_after=wallet.deposit_balance,
+            winnings_balance_after=wallet.winnings_balance,
+            available_balance_after=wallet.available_balance,
+            locked_balance_after=wallet.locked_balance,
+            description=description,
+            reference_type=reference_type,
+            reference_id=reference_id,
+            metadata_json=metadata,
+        )
+        await self.session.flush()
+        return txn
+
+    async def settle_pending_deposit(self, transaction_id: UUID) -> WalletTransaction:
+        """Transition a PENDING deposit CREDIT to SUCCESS, applying the
+        balance change now (called when an admin approves the deposit)."""
+        txn = await self.txn_repo.get_by_id(transaction_id)
+        if txn is None:
+            raise NotFoundException("Transaction not found")
+        if txn.status != WalletTransactionStatus.PENDING:
+            raise ConflictException(f"Transaction is already {txn.status.value}")
+
+        wallet = await self.wallet_repo.get_by_user_id_for_update(txn.user_id)
+        if wallet is None:
+            raise NotFoundException("Wallet not found for this user")
+        if wallet.is_frozen:
+            raise ForbiddenException("This wallet is frozen and cannot process transactions")
+
+        new_deposit = wallet.deposit_balance + txn.amount
+        wallet.deposit_balance = new_deposit
+
+        txn.status = WalletTransactionStatus.SUCCESS
+        txn.deposit_delta = txn.amount
+        txn.deposit_balance_after = new_deposit
+        txn.available_balance_after = new_deposit + wallet.winnings_balance
+        txn.locked_balance_after = wallet.locked_balance
+        await self.session.flush()
+        return txn
+
+    async def cancel_pending_deposit(
+        self, transaction_id: UUID, *, failed: bool = True
+    ) -> WalletTransaction:
+        """Transition a PENDING deposit CREDIT to FAILED/CANCELLED (called
+        when an admin rejects/holds it). No balance change — it was never
+        applied while pending."""
+        txn = await self.txn_repo.get_by_id(transaction_id)
+        if txn is None:
+            raise NotFoundException("Transaction not found")
+        if txn.status != WalletTransactionStatus.PENDING:
+            raise ConflictException(f"Transaction is already {txn.status.value}")
+        txn.status = WalletTransactionStatus.FAILED if failed else WalletTransactionStatus.CANCELLED
+        await self.session.flush()
+        return txn
+
     async def debit(
         self,
         user: User,

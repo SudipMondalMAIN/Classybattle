@@ -253,6 +253,21 @@ class PaymentService:
             await self.session.rollback()
             raise ConflictException("This UTR number has already been submitted") from exc
 
+        # Write a PENDING wallet ledger row right away so the deposit
+        # shows up in the user's transaction history immediately, not
+        # only once an admin approves it.
+        pending_txn = await self.wallet_service.create_pending_deposit(
+            user,
+            amount=amount,
+            reference_type="payment_deposit",
+            reference_id=str(payment_request.id),
+            description=f"UPI deposit submitted (UTR {utr_number})",
+            metadata={"payment_request_id": str(payment_request.id)},
+        )
+        payment_request = await self.request_repo.update(
+            payment_request, wallet_transaction_id=pending_txn.id
+        )
+
         await self.audit_service.record(
             entity="payment_request",
             action=AuditAction.CREATE,
@@ -285,6 +300,11 @@ class PaymentService:
             raise ForbiddenException("You do not have permission to cancel this request")
         if payment_request.status != PaymentRequestStatus.PENDING:
             raise ConflictException("Only pending requests can be cancelled")
+
+        if payment_request.wallet_transaction_id is not None:
+            await self.wallet_service.cancel_pending_deposit(
+                payment_request.wallet_transaction_id, failed=False
+            )
 
         payment_request = await self.request_repo.update(
             payment_request,
@@ -383,20 +403,28 @@ class PaymentService:
         target_user = payment_request.user
 
         # Wallet credit + PaymentRequest status transition happen in one
-        # transaction: commit=False keeps the wallet mutation open, we
-        # append the status update, and commit exactly once below.
-        from app.models.wallet_transaction import WalletBalanceSource
+        # transaction: the PENDING ledger row written at submission time
+        # (see submit_deposit) is settled here — balance applied now —
+        # and we append the status update, committing exactly once below.
+        if payment_request.wallet_transaction_id is not None:
+            txn = await self.wallet_service.settle_pending_deposit(
+                payment_request.wallet_transaction_id
+            )
+        else:
+            # Fallback for any pre-existing PaymentRequest rows created
+            # before this pending-ledger-row change shipped.
+            from app.models.wallet_transaction import WalletBalanceSource
 
-        txn = await self.wallet_service.credit(
-            target_user,
-            amount=payment_request.amount,
-            reference_type="payment_deposit",
-            reference_id=str(payment_request.id),
-            description=f"UPI deposit approved (UTR {payment_request.utr_number})",
-            metadata={"payment_request_id": str(payment_request.id)},
-            source=WalletBalanceSource.DEPOSIT,
-            commit=False,
-        )
+            txn = await self.wallet_service.credit(
+                target_user,
+                amount=payment_request.amount,
+                reference_type="payment_deposit",
+                reference_id=str(payment_request.id),
+                description=f"UPI deposit approved (UTR {payment_request.utr_number})",
+                metadata={"payment_request_id": str(payment_request.id)},
+                source=WalletBalanceSource.DEPOSIT,
+                commit=False,
+            )
 
         payment_request = await self.request_repo.update(
             payment_request,
@@ -459,6 +487,11 @@ class PaymentService:
             )
 
         target_user = payment_request.user
+
+        if payment_request.wallet_transaction_id is not None:
+            await self.wallet_service.cancel_pending_deposit(
+                payment_request.wallet_transaction_id, failed=True
+            )
 
         payment_request = await self.request_repo.update(
             payment_request,
