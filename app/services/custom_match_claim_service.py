@@ -221,15 +221,20 @@ class CustomMatchClaimService:
         # once one side of a 1v1 is settled, the match is settled, full
         # stop, regardless of which player this particular call thinks
         # the winner is.
+        #
+        # Fail CLOSED, not open: this used to swallow any exception here
+        # (e.g. a transient DB/connection-pool error while lazy-loading
+        # `.participant`) and silently treat it as "not paid yet", which
+        # let the payout proceed anyway -- exactly the kind of blip seen
+        # under connection-pool exhaustion, and exactly how a genuine
+        # single-paid match could still get paid a second time. If we
+        # can't positively confirm the paid state, we must not pay.
         if not already_paid:
-            try:
-                slots = await self.slot_repo.list_for_tournament(tournament.id)
-                already_paid = any(
-                    s.participant_id and s.participant is not None and s.winning_paid_at is not None
-                    for s in slots
-                )
-            except Exception:  # noqa: BLE001 - fall through to the normal path if this lookup fails
-                pass
+            slots = await self.slot_repo.list_for_tournament(tournament.id)
+            already_paid = any(
+                s.participant_id and s.participant is not None and s.winning_paid_at is not None
+                for s in slots
+            )
 
         if not already_paid:
             await self.admin_service.declare_result(
@@ -341,15 +346,14 @@ class CustomMatchClaimService:
             raise NotFoundException("Tournament not found")
         winner = await self.user_repo.get_by_id(claim.user_id)
 
-        already_paid = False
-        try:
-            slots = await self.slot_repo.list_for_tournament(claim.tournament_id)
-            already_paid = any(
-                s.participant_id and s.participant is not None and s.winning_paid_at is not None
-                for s in slots
-            )
-        except Exception:  # noqa: BLE001
-            pass
+        # Fail closed here too -- see the matching comment in
+        # _resolve_auto. A swallowed exception must never be read as
+        # "not paid yet".
+        slots = await self.slot_repo.list_for_tournament(claim.tournament_id)
+        already_paid = any(
+            s.participant_id and s.participant is not None and s.winning_paid_at is not None
+            for s in slots
+        )
 
         if not already_paid:
             await self.admin_service.declare_result(
