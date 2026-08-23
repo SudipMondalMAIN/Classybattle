@@ -189,6 +189,11 @@ class TournamentAdminService:
                             event_key=f"winner_declared:{tournament_id}:{user_id}",
                             send_email=False,
                             meta_data={"tournament_id": str(tournament_id)},
+                            # Must match declare_result's own commit flag —
+                            # otherwise this notification's internal commit
+                            # releases any row lock the caller (e.g. a
+                            # locked 1v1 auto-resolve) is still holding.
+                            commit=commit,
                         )
                     except Exception:  # noqa: BLE001 - never block result declaration
                         pass
@@ -263,6 +268,7 @@ class TournamentAdminService:
                 kills=row.kills or 0,
                 rank=row.rank,
                 amount=amount,
+                commit=commit,
             )
         except Exception:  # noqa: BLE001 - leaderboard stats must never block a payout
             pass
@@ -279,6 +285,10 @@ class TournamentAdminService:
                 event_key=f"prize_distributed:{tournament_id}:{user_id}",
                 send_email=False,
                 meta_data={"tournament_id": str(tournament_id)},
+                # Same reasoning as in declare_result() above — must match
+                # pay_winner's own commit flag or its internal commit
+                # releases the caller's still-held row lock early.
+                commit=commit,
             )
         except Exception:  # noqa: BLE001 - never block the payout itself
             pass

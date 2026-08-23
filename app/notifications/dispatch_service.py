@@ -58,11 +58,33 @@ class NotificationDispatchService:
         meta_data: Optional[dict] = None,
         send_push: bool = True,
         send_email: bool = False,
+        commit: bool = True,
     ) -> Optional[Notification]:
         """Create an in-app notification (and best-effort push/email) for
         one user. Returns the persisted Notification, or None if nothing
         was sent (duplicate event, muted preference, or an internal
-        failure — failures are logged, never raised)."""
+        failure — failures are logged, never raised).
+
+        Bug fix: this used to call ``self.session.commit()``/``rollback()``
+        unconditionally, with no way for a caller to suppress it. Callers
+        like TournamentAdminService.declare_result()/pay_winner() call this
+        for the "you won" / "prize credited" notifications *while still
+        holding a row lock* (taken by CustomMatchClaimService._resolve_auto
+        to serialize a 1v1's payout) -- so this commit silently released
+        that lock mid-transaction, before the payout it exists to serialize
+        was actually committed. That reopened the "both players tap Lost
+        at once and both get paid" race a second time, independent of and
+        in addition to the earlier wallet-auto-create commit bug, and on
+        every declare_result/pay_winner call rather than only first-time
+        winners -- which is why it kept happening even after that first
+        fix shipped.
+
+        Fix: accept the caller's ``commit`` flag. When False, use a
+        SAVEPOINT for the notification insert (so a duplicate event_key
+        collision only rolls back the notification, not the caller's
+        outer transaction/locks) and skip the final commit entirely,
+        leaving the caller in full control of when the transaction ends.
+        """
         try:
             if event_key:
                 existing = await self.notif_repo.get_by_event_key(event_key)
@@ -74,22 +96,26 @@ class NotificationDispatchService:
             notification: Optional[Notification] = None
             if prefs.in_app_enabled:
                 try:
-                    notification = await self.notif_repo.create(
-                        user_id=user.id,
-                        title=title,
-                        body=body,
-                        channel=NotificationChannel.IN_APP,
-                        status=NotificationStatus.SENT,
-                        event_type=event_type,
-                        event_key=event_key,
-                        meta_data=meta_data,
-                    )
+                    async with self.session.begin_nested():
+                        notification = await self.notif_repo.create(
+                            user_id=user.id,
+                            title=title,
+                            body=body,
+                            channel=NotificationChannel.IN_APP,
+                            status=NotificationStatus.SENT,
+                            event_type=event_type,
+                            event_key=event_key,
+                            meta_data=meta_data,
+                        )
                 except IntegrityError:
                     # Concurrent duplicate dispatch for the same event_key —
-                    # the unique constraint already guaranteed single delivery.
-                    await self.session.rollback()
+                    # the unique constraint already guaranteed single
+                    # delivery. begin_nested() already rolled back to the
+                    # savepoint, so the caller's outer transaction/locks
+                    # (if any) are untouched here.
                     existing = await self.notif_repo.get_by_event_key(event_key) if event_key else None
-                    await self.session.commit()
+                    if commit:
+                        await self.session.commit()
                     return existing
 
             if send_push and prefs.push_enabled:
@@ -105,14 +131,21 @@ class NotificationDispatchService:
             if send_email and prefs.email_enabled and getattr(user, "email", None):
                 await self._send_email_best_effort(user.email, title, body)
 
-            await self.session.commit()
+            if commit:
+                await self.session.commit()
             return notification
         except Exception as exc:  # noqa: BLE001 - notifications must never break callers
             logger.error("notification_dispatch_failed", user_id=str(user.id), error=str(exc))
-            try:
-                await self.session.rollback()
-            except Exception:  # noqa: BLE001
-                pass
+            if commit:
+                # Only roll back here when we own the transaction. If the
+                # caller is managing it (commit=False, e.g. inside a
+                # locked critical section), rolling back here would wipe
+                # out their pending, still-uncommitted work too -- leave
+                # that decision to them and just report the failure.
+                try:
+                    await self.session.rollback()
+                except Exception:  # noqa: BLE001
+                    pass
             return None
 
     async def dispatch_bulk(

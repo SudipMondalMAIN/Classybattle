@@ -661,7 +661,8 @@ class LeaderboardService:
     # statistics/leaderboard the same way record_match_completion does.
     # ------------------------------------------------------------------
     async def record_admin_winner_payout(
-        self, *, tournament_id: UUID, user_id: UUID, kills: int, rank: Optional[int], amount: Decimal
+        self, *, tournament_id: UUID, user_id: UUID, kills: int, rank: Optional[int],
+        amount: Decimal, commit: bool = True,
     ) -> None:
         source_id = f"{tournament_id}:{user_id}"
         if await self.update_log_repo.exists(LeaderboardSourceEvent.WINNER_DECLARED, source_id):
@@ -726,7 +727,17 @@ class LeaderboardService:
         await self.update_log_repo.mark(
             LeaderboardSourceEvent.WINNER_DECLARED, source_id, detail=f"tournament={tournament_id}"
         )
-        await self.session.commit()
+        # Bug fix: this used to commit unconditionally. It happened to be
+        # safe for the specific 1v1-lock race (winning_paid_at is already
+        # flushed by the time this runs), but leaving an unconditional
+        # commit inside a payment-critical call chain is fragile -- any
+        # future reordering could turn it into the same "commit releases
+        # the caller's row lock early" bug the wallet/notification fixes
+        # closed. Respect the caller's commit flag instead.
+        if commit:
+            await self.session.commit()
+        else:
+            await self.session.flush()
 
         await self._evaluate_achievements(user_id, AchievementTriggerType.MATCH_WIN, matches_won)
         if is_mvp:
