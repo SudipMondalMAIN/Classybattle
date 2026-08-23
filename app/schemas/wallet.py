@@ -125,6 +125,10 @@ class AdminWalletCreditRequest(BaseModel):
     reason: str = Field(..., min_length=3, max_length=500)
     reference_type: Optional[str] = Field(None, max_length=100)
     reference_id: Optional[str] = Field(None, max_length=100)
+    # Defaults to DEPOSIT: a manual admin top-up should behave like a
+    # UPI top-up (withdrawable-after-KYC deposit money), not like a
+    # prize payout. Pass WINNINGS explicitly for e.g. bonus/prize credits.
+    source: WalletBalanceSource = WalletBalanceSource.DEPOSIT
 
 
 class AdminWalletDebitRequest(BaseModel):

@@ -264,6 +264,7 @@ async def admin_credit_wallet(
         admin=admin,
         reference_type=payload.reference_type,
         reference_id=payload.reference_id,
+        source=payload.source,
     )
     return WalletTransactionRead.model_validate(txn)
 

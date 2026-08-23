@@ -812,7 +812,7 @@ class WalletService:
         admin: User,
         reference_type: Optional[str] = None,
         reference_id: Optional[str] = None,
-        source: WalletBalanceSource = WalletBalanceSource.WINNINGS,
+        source: WalletBalanceSource = WalletBalanceSource.DEPOSIT,
     ) -> WalletTransaction:
         if admin.role not in _ADMIN_ROLES:
             raise ForbiddenException("Only admins can credit wallet balances")
