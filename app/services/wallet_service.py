@@ -62,16 +62,43 @@ class WalletService:
     # ------------------------------------------------------------------
     # Wallet lookup / auto-create
     # ------------------------------------------------------------------
-    async def get_or_create_wallet(self, user: User) -> Wallet:
+    async def get_or_create_wallet(self, user: User, *, commit: bool = True) -> Wallet:
+        """Bug fix: this used to call ``self.session.commit()`` unconditionally
+        whenever a wallet had to be created for the first time. That's an
+        innocent-looking helper, but ``credit()``/``pay_winner()`` etc. call
+        it as their *first* step -- so any caller that had already taken a
+        row lock earlier in the same DB transaction (e.g.
+        CustomMatchClaimService._resolve_auto locking the tournament row
+        with SELECT ... FOR UPDATE before paying the winner) would have that
+        lock silently released early by this commit, the moment the winner
+        turned out to be a brand-new user with no wallet yet. That reopened
+        the exact "both players tap Lost at once and both get paid" race
+        the tournament-row lock was added to close -- it just now only
+        triggered for first-time winners instead of every time.
+
+        Fix: accept the caller's ``commit`` flag (threaded through from
+        credit/debit/etc.) and only commit here when the caller wants an
+        atomic, immediately-durable write of their own (the many read-only
+        or single-step callers that don't manage their own transaction).
+        When commit=False, wrap the wallet creation in a SAVEPOINT instead
+        of committing, so a concurrent creator racing us on the unique
+        user_id constraint just rolls back to the savepoint -- not the
+        whole outer transaction -- and we keep whatever locks/pending
+        writes the caller already holds.
+        """
         wallet = await self.wallet_repo.get_by_user_id(user.id)
         if wallet is not None:
             return wallet
         try:
-            wallet = await self.wallet_repo.create(user_id=user.id)
-            await self.session.commit()
+            async with self.session.begin_nested():
+                wallet = await self.wallet_repo.create(user_id=user.id)
+            if commit:
+                await self.session.commit()
         except IntegrityError:
             # Concurrent request already created it (unique user_id).
-            await self.session.rollback()
+            # The begin_nested() block above already rolled back to the
+            # savepoint on this exception, so the outer transaction (and
+            # any locks it holds) is still intact here.
             wallet = await self.wallet_repo.get_by_user_id(user.id)
             if wallet is None:  # pragma: no cover - defensive
                 raise
@@ -249,7 +276,7 @@ class WalletService:
         """source=DEPOSIT for UPI top-ups (payment_service), WINNINGS
         (default) for prize payouts / refunds / bonuses — winnings are
         the only credited funds that stay withdrawable."""
-        await self.get_or_create_wallet(user)
+        await self.get_or_create_wallet(user, commit=commit)
         deposit_delta = amount if source == WalletBalanceSource.DEPOSIT else Decimal("0")
         winnings_delta = amount if source == WalletBalanceSource.WINNINGS else Decimal("0")
         txn = await self._mutate(
@@ -404,7 +431,7 @@ class WalletService:
         withdrawals (deposit money is never withdrawable). Tournament entry
         fees must use debit_entry_fee() instead, which can draw from both
         buckets."""
-        await self.get_or_create_wallet(user)
+        await self.get_or_create_wallet(user, commit=commit)
         txn = await self._mutate(
             user_id=user.id,
             type_=WalletTransactionType.DEBIT,
@@ -452,7 +479,7 @@ class WalletService:
         recorded on the ledger row (deposit_delta/winnings_delta) so a
         later cancellation can refund the exact same buckets via
         refund_entry_fee()."""
-        await self.get_or_create_wallet(user)
+        await self.get_or_create_wallet(user, commit=commit)
         wallet = await self.wallet_repo.get_by_user_id(user.id)
         deposit_use = min(amount, wallet.deposit_balance) if wallet.deposit_balance > 0 else Decimal("0")
         winnings_use = amount - deposit_use
@@ -560,7 +587,7 @@ class WalletService:
         before the outcome is known. Not used by the current tournament
         entry flow (which uses debit_entry_fee instead), kept for other
         hold-style callers (e.g. admin/legacy routes)."""
-        await self.get_or_create_wallet(user)
+        await self.get_or_create_wallet(user, commit=commit)
         txn = await self._mutate(
             user_id=user.id,
             type_=WalletTransactionType.HOLD,
@@ -663,7 +690,7 @@ class WalletService:
         # Generic refund (e.g. withdrawal cancelled) — always credited back
         # to winnings_balance, since debit() only ever draws from winnings.
         # Entry-fee refunds must use refund_entry_fee() instead.
-        await self.get_or_create_wallet(user)
+        await self.get_or_create_wallet(user, commit=commit)
         txn = await self._mutate(
             user_id=user.id,
             type_=WalletTransactionType.REFUND,
@@ -708,7 +735,7 @@ class WalletService:
     ) -> WalletTransaction:
         # Admin bonuses land in winnings_balance (withdrawable), matching
         # how promotional/bonus credit is generally expected to behave.
-        await self.get_or_create_wallet(user)
+        await self.get_or_create_wallet(user, commit=commit)
         txn = await self._mutate(
             user_id=user.id,
             type_=WalletTransactionType.BONUS,
