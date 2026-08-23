@@ -23,6 +23,7 @@ from decimal import Decimal
 from typing import Optional
 from uuid import UUID
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import ForbiddenException, NotFoundException, ValidationException
@@ -199,13 +200,55 @@ class CustomMatchClaimService:
         # and both players get credited for a 1v1 that should only ever
         # pay one winner.
         #
-        # Fix: take a row lock on the tournament itself before doing the
-        # already_paid check or any declare/pay call, and don't commit
-        # until the whole resolution is done. A concurrent call for the
-        # same tournament blocks on this lock until the first call's
-        # commit, at which point its own already_paid check (re-read
-        # fresh, under the lock) correctly sees the match as settled and
-        # backs off instead of paying out a second time.
+        # Fix: take a Postgres SESSION-level advisory lock keyed on the
+        # tournament id, released explicitly in a finally block, ahead
+        # of (and in addition to) the row lock below.
+        #
+        # Why not rely on SELECT ... FOR UPDATE alone: in production,
+        # two "Lost" taps 69ms apart both went through and both got
+        # paid (confirmed via wallet_transactions -- same reference_id
+        # tournament, two AUTO_RESOLVED payouts). That means the row
+        # lock was not actually serializing the two requests -- almost
+        # certainly because the DB sits behind Supabase's pooler and
+        # something in that path (proxied session handling, a pool
+        # cycling the underlying server connection between statements,
+        # etc.) let a second SELECT ... FOR UPDATE proceed without
+        # truly blocking on the first transaction's open lock.
+        # pg_advisory_lock is a single explicit call with none of
+        # ORM's transaction-boundary assumptions -- it blocks the
+        # calling connection at the Postgres level directly, so it
+        # doesn't depend on how the pooler multiplexes the rest of the
+        # session. We take it as its own statement, before the row
+        # lock, and always release it in `finally` so a raised
+        # exception (or the fail-closed abort above) can't leak a held
+        # lock into the connection-pool's next borrower.
+        lock_key = int(tournament.id.int % (2**63))
+        await self.session.execute(
+            text("SELECT pg_advisory_lock(:key)"), {"key": lock_key}
+        )
+        try:
+            await self._resolve_auto_locked(
+                tournament,
+                winner_user_id=winner_user_id,
+                loser_claim=loser_claim,
+                winner_claim=winner_claim,
+            )
+        finally:
+            await self.session.execute(
+                text("SELECT pg_advisory_unlock(:key)"), {"key": lock_key}
+            )
+
+    async def _resolve_auto_locked(
+        self,
+        tournament,
+        *,
+        winner_user_id: UUID,
+        loser_claim: Optional[CustomMatchClaim],
+        winner_claim: Optional[CustomMatchClaim],
+    ) -> None:
+        # Row lock kept as a second, belt-and-suspenders layer -- see
+        # the advisory-lock comment in _resolve_auto for why it alone
+        # wasn't enough in production.
         locked_tournament = await self.tournament_repo.get_by_id_for_update(tournament.id)
         if locked_tournament is None:
             raise NotFoundException("Tournament not found")
@@ -337,10 +380,23 @@ class CustomMatchClaimService:
         if claim.outcome != CustomMatchClaimOutcome.WIN:
             raise ValidationException("Only WIN claims need admin approval.")
 
-        # Same lock-then-check guard as the auto-resolve path: prevents
-        # an admin approval racing a same-tournament auto-resolve (e.g.
-        # the opponent taps "Lost" at the same moment) from paying out
-        # twice for one 1v1 match.
+        # Same advisory-lock + row-lock guard as the auto-resolve path
+        # -- see _resolve_auto for why the advisory lock is needed in
+        # addition to the row lock. Prevents an admin approval racing a
+        # same-tournament auto-resolve (e.g. the opponent taps "Lost"
+        # at the same moment) from paying out twice for one 1v1 match.
+        lock_key = int(claim.tournament_id.int % (2**63))
+        await self.session.execute(
+            text("SELECT pg_advisory_lock(:key)"), {"key": lock_key}
+        )
+        try:
+            return await self._approve_locked(claim, admin)
+        finally:
+            await self.session.execute(
+                text("SELECT pg_advisory_unlock(:key)"), {"key": lock_key}
+            )
+
+    async def _approve_locked(self, claim: CustomMatchClaim, admin: User) -> CustomMatchClaim:
         tournament = await self.tournament_repo.get_by_id_for_update(claim.tournament_id)
         if tournament is None:
             raise NotFoundException("Tournament not found")
