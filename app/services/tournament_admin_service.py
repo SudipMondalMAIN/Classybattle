@@ -134,6 +134,7 @@ class TournamentAdminService:
         kills: Optional[int],
         is_winner: Optional[bool],
         rank: Optional[int] = None,
+        commit: bool = True,
     ):
         kind, row = await self._find_player_slot(tournament_id, user_id)
         update_data = {}
@@ -160,7 +161,10 @@ class TournamentAdminService:
                 repo = BaseRepository(self.session, TournamentTeamMember)
                 row = await repo.update(row, **update_data)
 
-            await self.session.commit()
+            if commit:
+                await self.session.commit()
+            else:
+                await self.session.flush()
             await self.session.refresh(row)
 
             # Newly marked a winner -> let the player know right away,
@@ -199,7 +203,8 @@ class TournamentAdminService:
         )
 
     async def pay_winner(
-        self, tournament_id: UUID, user_id: UUID, *, amount: Decimal, note: Optional[str], current_user: User
+        self, tournament_id: UUID, user_id: UUID, *, amount: Decimal, note: Optional[str],
+        current_user: User, commit: bool = True,
     ):
         kind, row = await self._find_player_slot(tournament_id, user_id)
         if not row.is_winner:
@@ -236,7 +241,10 @@ class TournamentAdminService:
             repo = BaseRepository(self.session, TournamentTeamMember)
             row = await repo.update(row, **update_data)
 
-        await self.session.commit()
+        if commit:
+            await self.session.commit()
+        else:
+            await self.session.flush()
         await self.session.refresh(row)
 
         tournament, _game = await self._get_tournament_and_game(tournament_id)

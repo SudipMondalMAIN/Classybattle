@@ -42,8 +42,8 @@ _MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024  # 5 MB
 _MANAGER_ROLES = {UserRole.ADMIN, UserRole.SUPER_ADMIN}
 
 # Platform cut on user-created ("custom") tournaments. e.g. entry_fee=10,
-# max_players=2 -> pool=20 -> prize_pool=16.50 (platform keeps 3.50).
-PLATFORM_COMMISSION_RATE = Decimal("0.175")
+# max_players=2 -> pool=20 -> prize_pool=18.00 (platform keeps 2.00).
+PLATFORM_COMMISSION_RATE = Decimal("0.10")
 
 
 class TournamentService:

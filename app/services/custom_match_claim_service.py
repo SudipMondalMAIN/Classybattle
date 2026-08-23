@@ -191,6 +191,25 @@ class CustomMatchClaimService:
         loser_claim: Optional[CustomMatchClaim],
         winner_claim: Optional[CustomMatchClaim],
     ) -> None:
+        # Race fix: when both players tap "Lost" at nearly the same time,
+        # two concurrent requests each resolve the match in the *other*
+        # player's favour (A's "I lost" request pays B, B's "I lost"
+        # request pays A) -- both already_paid checks below can read
+        # False before either has committed, so both payouts go through
+        # and both players get credited for a 1v1 that should only ever
+        # pay one winner.
+        #
+        # Fix: take a row lock on the tournament itself before doing the
+        # already_paid check or any declare/pay call, and don't commit
+        # until the whole resolution is done. A concurrent call for the
+        # same tournament blocks on this lock until the first call's
+        # commit, at which point its own already_paid check (re-read
+        # fresh, under the lock) correctly sees the match as settled and
+        # backs off instead of paying out a second time.
+        locked_tournament = await self.tournament_repo.get_by_id_for_update(tournament.id)
+        if locked_tournament is None:
+            raise NotFoundException("Tournament not found")
+
         already_paid = False
         try:
             _, slot = await self.admin_service._find_player_slot(tournament.id, winner_user_id)
@@ -198,18 +217,33 @@ class CustomMatchClaimService:
         except NotFoundException:
             pass
 
+        # Also bail out if the *other* player has already been paid --
+        # once one side of a 1v1 is settled, the match is settled, full
+        # stop, regardless of which player this particular call thinks
+        # the winner is.
+        if not already_paid:
+            try:
+                slots = await self.slot_repo.list_for_tournament(tournament.id)
+                already_paid = any(
+                    s.participant_id and s.participant is not None and s.winning_paid_at is not None
+                    for s in slots
+                )
+            except Exception:  # noqa: BLE001 - fall through to the normal path if this lookup fails
+                pass
+
         if not already_paid:
             await self.admin_service.declare_result(
-                tournament.id, winner_user_id, kills=None, is_winner=True
+                tournament.id, winner_user_id, kills=None, is_winner=True, commit=False
             )
             winner_user = await self.user_repo.get_by_id(winner_user_id)
             if winner_user is not None:
                 await self.admin_service.pay_winner(
-                    tournament.id,
+                    locked_tournament.id,
                     winner_user_id,
-                    amount=Decimal(tournament.prize_pool),
-                    note=f"Auto-approved result for '{tournament.title}'",
+                    amount=Decimal(locked_tournament.prize_pool),
+                    note=f"Auto-approved result for '{locked_tournament.title}'",
                     current_user=winner_user,
+                    commit=False,
                 )
 
         now = datetime.now(timezone.utc)
@@ -221,6 +255,9 @@ class CustomMatchClaimService:
             await self.claim_repo.update(
                 winner_claim, status=CustomMatchClaimStatus.AUTO_RESOLVED, resolved_at=now
             )
+        # Single commit for the whole locked critical section -- this is
+        # what releases the tournament row lock, so it must happen after
+        # every check/declare/pay step above, not before.
         await self.session.commit()
 
     # ------------------------------------------------------------------
@@ -295,18 +332,37 @@ class CustomMatchClaimService:
         if claim.outcome != CustomMatchClaimOutcome.WIN:
             raise ValidationException("Only WIN claims need admin approval.")
 
-        tournament = await self.tournament_repo.get_by_id(claim.tournament_id)
+        # Same lock-then-check guard as the auto-resolve path: prevents
+        # an admin approval racing a same-tournament auto-resolve (e.g.
+        # the opponent taps "Lost" at the same moment) from paying out
+        # twice for one 1v1 match.
+        tournament = await self.tournament_repo.get_by_id_for_update(claim.tournament_id)
+        if tournament is None:
+            raise NotFoundException("Tournament not found")
         winner = await self.user_repo.get_by_id(claim.user_id)
-        await self.admin_service.declare_result(
-            claim.tournament_id, claim.user_id, kills=None, is_winner=True
-        )
-        await self.admin_service.pay_winner(
-            claim.tournament_id,
-            claim.user_id,
-            amount=Decimal(tournament.prize_pool),
-            note=f"Admin-approved result for '{tournament.title}'",
-            current_user=admin,
-        )
+
+        already_paid = False
+        try:
+            slots = await self.slot_repo.list_for_tournament(claim.tournament_id)
+            already_paid = any(
+                s.participant_id and s.participant is not None and s.winning_paid_at is not None
+                for s in slots
+            )
+        except Exception:  # noqa: BLE001
+            pass
+
+        if not already_paid:
+            await self.admin_service.declare_result(
+                claim.tournament_id, claim.user_id, kills=None, is_winner=True, commit=False
+            )
+            await self.admin_service.pay_winner(
+                claim.tournament_id,
+                claim.user_id,
+                amount=Decimal(tournament.prize_pool),
+                note=f"Admin-approved result for '{tournament.title}'",
+                current_user=admin,
+                commit=False,
+            )
 
         now = datetime.now(timezone.utc)
         claim = await self.claim_repo.update(
