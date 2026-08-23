@@ -73,10 +73,16 @@ class SlotJoinService:
         if current >= tournament.max_players:
             raise ConflictException("This slot has reached maximum capacity")
 
-    async def _charge_entry_fee(self, tournament: Tournament, user: User, fee) -> None:
+    async def _charge_entry_fee(
+        self, tournament: Tournament, user: User, fee
+    ) -> Optional[str]:
+        """Debits the entry fee and returns the wallet transaction id so
+        callers can persist it as the participant's payment_reference --
+        without that reference, cancellation-time refunds silently no-op
+        (see ParticipantService._refund_entry_fee's payment_reference guard)."""
         if not fee or fee <= 0:
-            return
-        await self.wallet_service.debit_entry_fee(
+            return None
+        txn = await self.wallet_service.debit_entry_fee(
             user,
             amount=fee,
             reference_type=_WALLET_SLOT_ENTRY_REF_TYPE,
@@ -84,6 +90,7 @@ class SlotJoinService:
             description=f"Entry fee for '{tournament.title}'",
             commit=False,
         )
+        return str(txn.id)
 
     # ------------------------------------------------------------------
     # Solo join
@@ -110,7 +117,9 @@ class SlotJoinService:
 
         from app.models.participant import Participant, ParticipantPaymentStatus, ParticipantStatus
 
-        await self._charge_entry_fee(tournament, current_user, tournament.entry_fee)
+        payment_reference = await self._charge_entry_fee(
+            tournament, current_user, tournament.entry_fee
+        )
 
         participant = existing_participant or await self.participant_repo.create(
             tournament_id=tournament.id,
@@ -119,6 +128,7 @@ class SlotJoinService:
             status=ParticipantStatus.CONFIRMED,
             payment_status=ParticipantPaymentStatus.PAID,
             entry_fee_paid=tournament.entry_fee,
+            payment_reference=payment_reference,
         )
 
         slot_number = await self.slot_repo.next_slot_number(tournament.id)
@@ -203,7 +213,9 @@ class SlotJoinService:
                 status=TournamentTeamStatus.FORMING,
             )
 
-        await self._charge_entry_fee(tournament, current_user, tournament.entry_fee)
+        payment_reference = await self._charge_entry_fee(
+            tournament, current_user, tournament.entry_fee
+        )
 
         member_repo = BaseRepository(self.session, TournamentTeamMember)
         await member_repo.create(
@@ -237,6 +249,7 @@ class SlotJoinService:
                 status=ParticipantStatus.CONFIRMED,
                 payment_status=payment_status,
                 entry_fee_paid=tournament.entry_fee if payment_status == ParticipantPaymentStatus.PAID else 0,
+                payment_reference=payment_reference,
             )
         else:
             await self.participant_repo.update(
@@ -247,6 +260,7 @@ class SlotJoinService:
                 status=ParticipantStatus.CONFIRMED,
                 payment_status=payment_status,
                 entry_fee_paid=tournament.entry_fee if payment_status == ParticipantPaymentStatus.PAID else 0,
+                payment_reference=payment_reference,
                 cancelled_at=None,
                 joined_at=datetime.now(timezone.utc),
             )
