@@ -35,7 +35,22 @@ async def get_current_user(
     if user is None or not user.is_active:
         raise UnauthorizedException("User not found or inactive")
 
+    await _touch_presence(session, user.id)
+
     return user
+
+
+async def _touch_presence(session: AsyncSession, user_id: UUID) -> None:
+    """Marks the user online on the back of any authenticated API call, so
+    the client doesn't need a dedicated heartbeat/presence call -- simply
+    using the app (any screen that hits the API) keeps them marked online.
+    Best-effort: presence tracking must never break the actual request."""
+    from app.repositories.social_repository import PlayerProfileRepository
+
+    try:
+        await PlayerProfileRepository(session).touch_presence_if_stale(user_id)
+    except Exception:
+        await session.rollback()
 
 
 async def get_current_user_optional(
@@ -56,6 +71,7 @@ async def get_current_user_optional(
         user = await user_repo.get_by_id(UUID(user_id))
         if user is None or not user.is_active:
             return None
+        await _touch_presence(session, user.id)
         return user
     except Exception:
         return None

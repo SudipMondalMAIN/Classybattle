@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional, Sequence
 from uuid import UUID
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.social import (
@@ -32,6 +32,36 @@ class PlayerProfileRepository(BaseRepository[PlayerProfile]):
         )
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
+
+    async def touch_presence_if_stale(
+        self, user_id: UUID, *, min_interval_seconds: int = 60
+    ) -> None:
+        """Marks a user online + refreshes last_seen_at, but only writes when
+        the last heartbeat is older than min_interval_seconds (or missing).
+        This lets callers invoke it on *every* authenticated request cheaply
+        -- most calls become a no-op WHERE match with zero rows updated,
+        instead of writing on every single API call. Silently does nothing
+        if the user has no PlayerProfile yet (profiles are created lazily);
+        we deliberately don't force-create one here to keep this fast and
+        side-effect-light on the hot auth path."""
+        now = datetime.now(timezone.utc)
+        cutoff = now - timedelta(seconds=min_interval_seconds)
+        stmt = (
+            update(PlayerProfile)
+            .where(
+                PlayerProfile.user_id == user_id,
+                PlayerProfile.deleted_at.is_(None),
+                or_(
+                    PlayerProfile.last_seen_at.is_(None),
+                    PlayerProfile.last_seen_at < cutoff,
+                    PlayerProfile.is_online.is_(False),
+                ),
+            )
+            .values(is_online=True, last_seen_at=now)
+        )
+        result = await self.session.execute(stmt)
+        if result.rowcount:
+            await self.session.commit()
 
     async def count_online(self, *, stale_after_minutes: int = 5) -> int:
         """Counts users currently marked online. is_online is set by the
