@@ -15,6 +15,7 @@ class AppVersionUpsert(BaseModel):
     latest_build_number: int = Field(..., gt=0)
     min_supported_version: str = Field(..., max_length=20)
     force_update: bool = False
+    maintenance_mode: bool = False
     update_url: str = Field(..., max_length=500)
     update_title: str = Field(default="Update Available", max_length=150)
     update_message: str = Field(
@@ -32,12 +33,23 @@ class AppVersionRead(BaseModel):
     latest_build_number: int
     min_supported_version: str
     force_update: bool
+    maintenance_mode: bool
     update_url: str
     update_title: str
     update_message: str
     is_active: bool
     created_at: datetime
     updated_at: datetime
+
+
+class MaintenanceModeToggle(BaseModel):
+    """Body for the dedicated maintenance on/off endpoint -- lets admins
+    take the app down without touching version numbers or update_url."""
+
+    enabled: bool
+    title: Optional[str] = Field(default=None, max_length=150)
+    message: Optional[str] = None
+    status_url: Optional[str] = Field(default=None, max_length=500)
 
 
 class AppVersionCheckResponse(BaseModel):

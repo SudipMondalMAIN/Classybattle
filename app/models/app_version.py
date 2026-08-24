@@ -46,6 +46,13 @@ class AppVersion(BaseModel):
 
     force_update: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
+    # Independent kill-switch: when true, EVERY app instance is shown the
+    # blocking update/maintenance screen regardless of its installed
+    # version -- used for planned maintenance windows. Deliberately
+    # separate from force_update/min_supported_version so admins don't
+    # have to fake version numbers to take the app offline.
+    maintenance_mode: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
     update_url: Mapped[str] = mapped_column(String(500), nullable=False)
 
     update_title: Mapped[str] = mapped_column(

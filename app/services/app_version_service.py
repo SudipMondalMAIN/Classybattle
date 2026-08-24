@@ -60,6 +60,18 @@ class AppVersionService:
                 update_message="",
             )
 
+        if record.maintenance_mode:
+            # Kill-switch: block every installed version regardless of its
+            # number, no need to fake latest_version/min_supported_version.
+            return AppVersionCheckResponse(
+                update_available=True,
+                force_update=True,
+                latest_version=record.latest_version,
+                update_url=record.update_url,
+                update_title=record.update_title,
+                update_message=record.update_message,
+            )
+
         below_min = _version_lt(current_version, record.min_supported_version)
         update_available = _version_lt(current_version, record.latest_version)
         force = record.force_update or below_min
@@ -72,3 +84,44 @@ class AppVersionService:
             update_title=record.update_title,
             update_message=record.update_message,
         )
+
+    async def set_maintenance(
+        self,
+        platform: AppPlatform,
+        *,
+        enabled: bool,
+        title: str | None = None,
+        message: str | None = None,
+        status_url: str | None = None,
+    ) -> AppVersion:
+        """Dedicated on/off switch for the maintenance kill-switch. Creates
+        a minimal AppVersion row for the platform if one doesn't exist yet
+        (e.g. version info was never configured), since maintenance_mode
+        must work independently of that setup."""
+        record = await self.repo.get_by_platform(platform)
+        updates: dict = {"maintenance_mode": enabled, "is_active": True}
+        if title is not None:
+            updates["update_title"] = title
+        if message is not None:
+            updates["update_message"] = message
+        if status_url is not None:
+            updates["update_url"] = status_url
+
+        if record is None:
+            defaults = {
+                "latest_version": "0.0.0",
+                "latest_build_number": 1,
+                "min_supported_version": "0.0.0",
+                "force_update": False,
+                "update_url": status_url or "https://status.classybattle.online",
+                "update_title": title or "Under Maintenance",
+                "update_message": message
+                or "ClassyBattle is currently undergoing scheduled maintenance. Please check back shortly.",
+            }
+            defaults.update(updates)
+            record = await self.repo.create(platform=platform, **defaults)
+        else:
+            record = await self.repo.update(record, **updates)
+
+        await self.session.commit()
+        return record

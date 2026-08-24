@@ -11,7 +11,12 @@ from app.database.session import get_db_session
 from app.dependencies.auth import require_admin
 from app.models.app_version import AppPlatform
 from app.models.user import User
-from app.schemas.app_version import AppVersionCheckResponse, AppVersionRead, AppVersionUpsert
+from app.schemas.app_version import (
+    AppVersionCheckResponse,
+    AppVersionRead,
+    AppVersionUpsert,
+    MaintenanceModeToggle,
+)
 from app.services.app_version_service import AppVersionService
 
 router = APIRouter(prefix="/app/version", tags=["App Version"])
@@ -49,4 +54,25 @@ async def set_app_version(
     """Admin sets/updates version info -- this is what triggers the force update."""
     service = AppVersionService(session)
     record = await service.upsert(platform, payload)
+    return AppVersionRead.model_validate(record)
+
+
+@router.post("/{platform}/maintenance", response_model=AppVersionRead)
+async def toggle_maintenance_mode(
+    platform: AppPlatform,
+    payload: MaintenanceModeToggle,
+    current_user: User = Depends(require_admin),
+    session: AsyncSession = Depends(get_db_session),
+):
+    """One-tap kill-switch: instantly blocks (or unblocks) every installed
+    app on this platform with the maintenance screen, independent of
+    version numbers -- no need to fake latest_version/force_update."""
+    service = AppVersionService(session)
+    record = await service.set_maintenance(
+        platform,
+        enabled=payload.enabled,
+        title=payload.title,
+        message=payload.message,
+        status_url=payload.status_url,
+    )
     return AppVersionRead.model_validate(record)
