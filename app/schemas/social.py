@@ -43,6 +43,7 @@ class PublicUserSummary(BaseModel):
     full_name: str
     player_uid: str
     country: Optional[str] = None
+    avatar_id: Optional[str] = None
     game_profiles: list[GameProfileSummary] = Field(default_factory=list)
 
 

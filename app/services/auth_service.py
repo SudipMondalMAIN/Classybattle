@@ -29,6 +29,7 @@ from app.emails.email_service import email_service
 from app.models.otp import OTPPurpose
 from app.models.user import User, UserRole
 from app.core.request_context import get_client_ip
+from app.repositories.leaderboard_repository import PlayerStatisticsRepository
 from app.repositories.refresh_token_repository import RefreshTokenRepository
 from app.repositories.user_repository import UserRepository
 from app.schemas.auth import LoginRequest, ResetPasswordRequest, SignupRequest
@@ -127,6 +128,13 @@ class AuthService:
             player_uid=await self._generate_unique_player_uid(),
             avatar_id=random.choice(PREDEFINED_AVATARS),
         )
+
+        # Every user needs a PlayerStatistics row from day one, otherwise
+        # they're invisible on the leaderboard until their first match/
+        # payout event creates one (see LeaderboardService.record_match_completion
+        # / record_admin_winner_payout). Zero-score row here fixes that.
+        await PlayerStatisticsRepository(self.session).get_or_create(user.id)
+
         await self.session.commit()
 
         access_token, refresh_token = await self._issue_tokens(user)

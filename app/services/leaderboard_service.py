@@ -590,6 +590,7 @@ class LeaderboardService:
         since PlayerStatistics already has a real `user` relationship
         (see the model) and overwriting that attribute with a dict
         breaks SQLAlchemy's attribute machinery."""
+        from sqlalchemy import func as _func
         from sqlalchemy import select as _select
 
         from app.models.social import PlayerProfile
@@ -599,13 +600,18 @@ class LeaderboardService:
         if not user_ids:
             return {}
         stmt = (
-            _select(User.id, User.full_name, User.player_uid, PlayerProfile.avatar_url)
+            _select(
+                User.id,
+                User.full_name,
+                User.player_uid,
+                _func.coalesce(PlayerProfile.avatar_url, User.avatar_id).label("avatar_id"),
+            )
             .outerjoin(PlayerProfile, PlayerProfile.user_id == User.id)
             .where(User.id.in_(user_ids))
         )
         result = await self.session.execute(stmt)
         return {
-            row.id: {"id": row.id, "full_name": row.full_name, "player_uid": row.player_uid, "avatar_id": row.avatar_url}
+            row.id: {"id": row.id, "full_name": row.full_name, "player_uid": row.player_uid, "avatar_id": row.avatar_id}
             for row in result.all()
         }
 
