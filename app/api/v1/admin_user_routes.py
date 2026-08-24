@@ -17,6 +17,7 @@ from app.database.session import get_db_session
 from app.dependencies.auth import require_admin
 from app.models.participant import ParticipantStatus
 from app.repositories.participant_repository import ParticipantRepository
+from app.repositories.social_repository import PlayerProfileRepository
 from app.repositories.user_repository import UserRepository
 from app.schemas.participant import PaginatedParticipants, ParticipantListItem
 from app.schemas.social import FriendListItem, PaginatedFriends
@@ -24,6 +25,16 @@ from app.schemas.user import PaginatedAdminUsers, UserRead
 from app.services.social_service import FriendshipService
 
 router = APIRouter(prefix="/admin/users", tags=["Admin User Management"])
+
+
+@router.get("/online-count")
+async def get_online_user_count(
+    session: AsyncSession = Depends(get_db_session),
+    _admin=Depends(require_admin),
+):
+    """Number of users currently online, for the admin Users tab header."""
+    count = await PlayerProfileRepository(session).count_online()
+    return {"online_count": count}
 
 
 @router.get("", response_model=PaginatedAdminUsers)

@@ -3,6 +3,7 @@ Repository layer for the Social System — Phase 15A.
 """
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Sequence
 from uuid import UUID
 
@@ -31,6 +32,27 @@ class PlayerProfileRepository(BaseRepository[PlayerProfile]):
         )
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
+
+    async def count_online(self, *, stale_after_minutes: int = 5) -> int:
+        """Counts users currently marked online. is_online is set by the
+        client via POST /presence/online and never auto-expires, so a
+        crashed/killed app can leave it stuck true -- guard against that
+        by also requiring a recent last_seen_at heartbeat."""
+        cutoff = datetime.now(timezone.utc) - timedelta(minutes=stale_after_minutes)
+        stmt = (
+            select(func.count())
+            .select_from(PlayerProfile)
+            .join(User, User.id == PlayerProfile.user_id)
+            .where(
+                PlayerProfile.is_online.is_(True),
+                PlayerProfile.deleted_at.is_(None),
+                PlayerProfile.last_seen_at.is_not(None),
+                PlayerProfile.last_seen_at >= cutoff,
+                User.deleted_at.is_(None),
+            )
+        )
+        result = await self.session.execute(stmt)
+        return int(result.scalar_one())
 
     async def search(
         self,
