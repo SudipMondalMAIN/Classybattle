@@ -149,6 +149,11 @@ class SupportChatService:
                     body=content[:200],
                     event_key=f"support_chat_message:{message.id}",
                     meta_data={"session_id": str(chat_session.id)},
+                    # Push only -- the message already appears directly in
+                    # the chat thread (broadcast_to_session above), so a
+                    # second copy in the general in-app notification list
+                    # would just be a duplicate.
+                    send_in_app=False,
                 )
         except Exception:  # noqa: BLE001
             pass

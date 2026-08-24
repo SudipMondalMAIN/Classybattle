@@ -58,12 +58,21 @@ class NotificationDispatchService:
         meta_data: Optional[dict] = None,
         send_push: bool = True,
         send_email: bool = False,
+        send_in_app: bool = True,
         commit: bool = True,
     ) -> Optional[Notification]:
         """Create an in-app notification (and best-effort push/email) for
         one user. Returns the persisted Notification, or None if nothing
         was sent (duplicate event, muted preference, or an internal
         failure — failures are logged, never raised).
+
+        ``send_in_app=False`` skips only the persisted in-app row (and,
+        with it, the ``notification_id`` embedded in the push payload) --
+        push/email still fire as normal. Used by callers whose event has
+        its own dedicated in-app surface already (e.g. support chat,
+        which shows agent messages directly in the chat thread) so users
+        don't get a duplicate entry in the general notification list on
+        top of that.
 
         Bug fix: this used to call ``self.session.commit()``/``rollback()``
         unconditionally, with no way for a caller to suppress it. Callers
@@ -94,7 +103,7 @@ class NotificationDispatchService:
             prefs = await self.pref_repo.get_or_create(user.id)
 
             notification: Optional[Notification] = None
-            if prefs.in_app_enabled:
+            if send_in_app and prefs.in_app_enabled:
                 try:
                     async with self.session.begin_nested():
                         notification = await self.notif_repo.create(
