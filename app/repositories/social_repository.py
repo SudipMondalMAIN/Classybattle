@@ -84,6 +84,59 @@ class PlayerProfileRepository(BaseRepository[PlayerProfile]):
         result = await self.session.execute(stmt)
         return int(result.scalar_one())
 
+    async def list_online(
+        self,
+        *,
+        page: int,
+        page_size: int,
+        search: Optional[str] = None,
+        stale_after_minutes: int = 5,
+    ) -> tuple[Sequence[User], int]:
+        """Paginated list of users currently online (same definition as
+        count_online: is_online flag + a recent last_seen_at heartbeat),
+        for the admin panel's 'Active users' view. Optional search matches
+        name/UID same as the main user search."""
+        cutoff = datetime.now(timezone.utc) - timedelta(minutes=stale_after_minutes)
+        base_filters = [
+            PlayerProfile.is_online.is_(True),
+            PlayerProfile.deleted_at.is_(None),
+            PlayerProfile.last_seen_at.is_not(None),
+            PlayerProfile.last_seen_at >= cutoff,
+            User.deleted_at.is_(None),
+        ]
+
+        stmt = (
+            select(User)
+            .join(PlayerProfile, PlayerProfile.user_id == User.id)
+            .where(*base_filters)
+        )
+        count_stmt = (
+            select(func.count(User.id))
+            .select_from(User)
+            .join(PlayerProfile, PlayerProfile.user_id == User.id)
+            .where(*base_filters)
+        )
+        if search:
+            like = f"%{search.strip().lower()}%"
+            search_filter = or_(
+                func.lower(User.full_name).like(like),
+                func.lower(User.player_uid).like(like),
+                func.lower(User.email).like(like),
+                func.lower(PlayerProfile.display_name).like(like),
+            )
+            stmt = stmt.where(search_filter)
+            count_stmt = count_stmt.where(search_filter)
+
+        stmt = (
+            stmt.order_by(PlayerProfile.last_seen_at.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        )
+
+        total = (await self.session.execute(count_stmt)).scalar_one()
+        rows = (await self.session.execute(stmt)).scalars().all()
+        return rows, total
+
     async def search(
         self,
         *,

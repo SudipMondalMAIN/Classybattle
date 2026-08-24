@@ -37,6 +37,31 @@ async def get_online_user_count(
     return {"online_count": count}
 
 
+@router.get("/online", response_model=PaginatedAdminUsers)
+async def list_online_users(
+    search: Optional[str] = Query(
+        None, max_length=200, description="Matches name, email, or player_uid"
+    ),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    session: AsyncSession = Depends(get_db_session),
+    _admin=Depends(require_admin),
+):
+    """Paginated list of currently-online users, for the admin panel's
+    'Active users' page (tapped from the online-count box on the Users tab)."""
+    rows, total = await PlayerProfileRepository(session).list_online(
+        page=page, page_size=page_size, search=search
+    )
+    total_pages = math.ceil(total / page_size) if total else 0
+    return PaginatedAdminUsers(
+        items=[UserRead.model_validate(u) for u in rows],
+        total=total,
+        page=page,
+        page_size=page_size,
+        total_pages=total_pages,
+    )
+
+
 @router.get("", response_model=PaginatedAdminUsers)
 async def search_users(
     search: Optional[str] = Query(
