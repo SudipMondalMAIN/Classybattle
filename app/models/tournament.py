@@ -231,6 +231,18 @@ class Tournament(ShortIdMixin, BaseModel):
     published_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     auto_complete_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    # Compare-and-swap gate for CustomMatchClaimService's 1v1 auto-
+    # resolve flow (see migration 0045 for why: row locks and advisory
+    # locks both failed to serialize concurrent "I Lost" submissions in
+    # production). Whichever request's
+    # "UPDATE ... WHERE custom_result_resolving_at IS NULL" actually
+    # affects this row wins the right to decide the match outcome; a
+    # concurrent request sees 0 rows affected and backs off. Postgres
+    # enforces this atomically at the row level regardless of pooling.
+    custom_result_resolving_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     # Absolute (UTC-stored) scheduled kickoff for this slot, e.g. an admin
     # slot time of "18:00" IST on 2026-08-15 is stored here as the
     # equivalent UTC instant. Set once at slot-generation time (see

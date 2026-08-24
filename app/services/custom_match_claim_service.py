@@ -27,6 +27,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import ForbiddenException, NotFoundException, ValidationException
+from app.core.logging import get_logger
 from app.models.custom_match_claim import (
     CustomMatchClaim,
     CustomMatchClaimOutcome,
@@ -40,6 +41,8 @@ from app.repositories.tournament_repository import TournamentRepository
 from app.repositories.user_repository import UserRepository
 from app.schemas.custom_match_claim import CustomMatchClaimPairRead, PendingClaimAdminRead
 from app.services.tournament_admin_service import TournamentAdminService
+
+logger = get_logger("custom_match_claim")
 
 
 def _is_admin(user: User) -> bool:
@@ -169,86 +172,118 @@ class CustomMatchClaimService:
             # No incentive to falsely confess a loss -- auto-crown and
             # pay the opponent immediately, no admin needed.
             await self._resolve_auto(
-                tournament, winner_user_id=opponent_id, loser_claim=claim,
-                winner_claim=opponent_claim,
+                tournament, player_a_id=current_user.id, player_b_id=opponent_id,
             )
         elif opponent_claim is not None and opponent_claim.outcome == CustomMatchClaimOutcome.LOSS:
             # Opponent already confessed the loss -- this WIN claim is
             # confirmed, no need to wait for admin review.
             await self._resolve_auto(
-                tournament, winner_user_id=current_user.id, loser_claim=opponent_claim,
-                winner_claim=claim,
+                tournament, player_a_id=current_user.id, player_b_id=opponent_id,
             )
         # else: both WIN (dispute) or opponent hasn't claimed yet ->
         # stays PENDING_REVIEW for an admin.
 
         return await self.get_claim_pair(tournament_id, current_user.id)
 
-    async def _resolve_auto(
-        self,
-        tournament,
-        *,
-        winner_user_id: UUID,
-        loser_claim: Optional[CustomMatchClaim],
-        winner_claim: Optional[CustomMatchClaim],
-    ) -> None:
-        # Race fix: when both players tap "Lost" at nearly the same time,
-        # two concurrent requests each resolve the match in the *other*
-        # player's favour (A's "I lost" request pays B, B's "I lost"
-        # request pays A) -- both already_paid checks below can read
-        # False before either has committed, so both payouts go through
-        # and both players get credited for a 1v1 that should only ever
-        # pay one winner.
+    async def _resolve_auto(self, tournament, *, player_a_id: UUID, player_b_id: UUID) -> None:
+        # Compare-and-swap gate (see migration 0045 + the model comment
+        # on Tournament.custom_result_resolving_at for the full story):
+        # SELECT ... FOR UPDATE row locks and pg_advisory_lock both
+        # failed to reliably serialize two near-simultaneous "I Lost"
+        # submissions in production -- confirmed via wallet_transactions
+        # showing both players paid for the same 1v1, even with the
+        # advisory lock deployed. A single conditional UPDATE is atomic
+        # at the row/MVCC level no matter how the pooler multiplexes
+        # connections underneath it, so it doesn't depend on lock or
+        # session continuity the way the previous approaches did.
         #
-        # Fix: take a Postgres SESSION-level advisory lock keyed on the
-        # tournament id, released explicitly in a finally block, ahead
-        # of (and in addition to) the row lock below.
-        #
-        # Why not rely on SELECT ... FOR UPDATE alone: in production,
-        # two "Lost" taps 69ms apart both went through and both got
-        # paid (confirmed via wallet_transactions -- same reference_id
-        # tournament, two AUTO_RESOLVED payouts). That means the row
-        # lock was not actually serializing the two requests -- almost
-        # certainly because the DB sits behind Supabase's pooler and
-        # something in that path (proxied session handling, a pool
-        # cycling the underlying server connection between statements,
-        # etc.) let a second SELECT ... FOR UPDATE proceed without
-        # truly blocking on the first transaction's open lock.
-        # pg_advisory_lock is a single explicit call with none of
-        # ORM's transaction-boundary assumptions -- it blocks the
-        # calling connection at the Postgres level directly, so it
-        # doesn't depend on how the pooler multiplexes the rest of the
-        # session. We take it as its own statement, before the row
-        # lock, and always release it in `finally` so a raised
-        # exception (or the fail-closed abort above) can't leak a held
-        # lock into the connection-pool's next borrower.
-        lock_key = int(tournament.id.int % (2**63))
-        await self.session.execute(
-            text("SELECT pg_advisory_lock(:key)"), {"key": lock_key}
+        # Whichever request's UPDATE actually flips the flag wins the
+        # right to decide this match's outcome; the loser just returns
+        # immediately -- it does NOT retry or raise, because the winner
+        # is about to finalize *both* players' claims (see below), not
+        # just the winner's own.
+        result = await self.session.execute(
+            text(
+                "UPDATE tournaments SET custom_result_resolving_at = now() "
+                "WHERE id = :id AND custom_result_resolving_at IS NULL "
+                "RETURNING id"
+            ),
+            {"id": tournament.id},
         )
-        try:
-            await self._resolve_auto_locked(
-                tournament,
-                winner_user_id=winner_user_id,
-                loser_claim=loser_claim,
-                winner_claim=winner_claim,
+        won_gate = result.first() is not None
+        # Commit immediately so the flag is visible to the other
+        # request the instant it checks -- don't hold this open behind
+        # whatever else this transaction might still be doing.
+        await self.session.commit()
+        if not won_gate:
+            logger.info(
+                "custom_result_gate_lost",
+                tournament_id=str(tournament.id),
+                player_a=str(player_a_id),
+                player_b=str(player_b_id),
             )
-        finally:
-            await self.session.execute(
-                text("SELECT pg_advisory_unlock(:key)"), {"key": lock_key}
-            )
+            return
 
-    async def _resolve_auto_locked(
-        self,
-        tournament,
-        *,
-        winner_user_id: UUID,
-        loser_claim: Optional[CustomMatchClaim],
-        winner_claim: Optional[CustomMatchClaim],
-    ) -> None:
-        # Row lock kept as a second, belt-and-suspenders layer -- see
-        # the advisory-lock comment in _resolve_auto for why it alone
-        # wasn't enough in production.
+        try:
+            await self._resolve_auto_locked(tournament, player_a_id=player_a_id, player_b_id=player_b_id)
+        finally:
+            # Gate is one-shot per tournament (resolution only ever
+            # happens once) -- no need to release it for a retry. Left
+            # set so a stray third request can never re-enter either.
+            pass
+
+    async def _resolve_auto_locked(self, tournament, *, player_a_id: UUID, player_b_id: UUID) -> None:
+        # We hold exclusive resolution rights for this tournament now.
+        # Re-read BOTH players' claims fresh -- do not trust whatever
+        # the caller thought the outcome was, since that snapshot could
+        # already be stale relative to what actually got committed by
+        # the other player's concurrent request.
+        claim_a = await self.claim_repo.get_by_tournament_and_user(tournament.id, player_a_id)
+        claim_b = await self.claim_repo.get_by_tournament_and_user(tournament.id, player_b_id)
+
+        a_lost = claim_a is not None and claim_a.outcome == CustomMatchClaimOutcome.LOSS
+        b_lost = claim_b is not None and claim_b.outcome == CustomMatchClaimOutcome.LOSS
+
+        now = datetime.now(timezone.utc)
+
+        if a_lost and b_lost:
+            # Both players claim they lost -- there's no honest winner
+            # to pay here (this is exactly the near-simultaneous "both
+            # tap Lost" case). Void the match: mark both claims
+            # resolved, pay nobody.
+            logger.info(
+                "custom_result_double_loss_void",
+                tournament_id=str(tournament.id),
+                player_a=str(player_a_id),
+                player_b=str(player_b_id),
+            )
+            await self.claim_repo.update(claim_a, status=CustomMatchClaimStatus.AUTO_RESOLVED, resolved_at=now)
+            await self.claim_repo.update(claim_b, status=CustomMatchClaimStatus.AUTO_RESOLVED, resolved_at=now)
+            await self.session.commit()
+            return
+
+        if a_lost:
+            loser_claim, loser_id = claim_a, player_a_id
+            winner_claim, winner_user_id = claim_b, player_b_id
+        elif b_lost:
+            loser_claim, loser_id = claim_b, player_b_id
+            winner_claim, winner_user_id = claim_a, player_a_id
+        else:
+            # Neither has a LOSS claim (e.g. a WIN-confirmation call
+            # raced ahead of the LOSS claim actually landing) -- nothing
+            # to resolve yet. Re-open the gate so whichever call
+            # eventually finds a real LOSS claim can win it and settle
+            # the match; otherwise this would strand the gate closed
+            # forever with the match never resolving.
+            await self.session.execute(
+                text(
+                    "UPDATE tournaments SET custom_result_resolving_at = NULL WHERE id = :id"
+                ),
+                {"id": tournament.id},
+            )
+            await self.session.commit()
+            return
+
         locked_tournament = await self.tournament_repo.get_by_id_for_update(tournament.id)
         if locked_tournament is None:
             raise NotFoundException("Tournament not found")
@@ -259,19 +294,6 @@ class CustomMatchClaimService:
             already_paid = slot.winning_paid_at is not None
         except NotFoundException:
             pass
-
-        # Also bail out if the *other* player has already been paid --
-        # once one side of a 1v1 is settled, the match is settled, full
-        # stop, regardless of which player this particular call thinks
-        # the winner is.
-        #
-        # Fail CLOSED, not open: this used to swallow any exception here
-        # (e.g. a transient DB/connection-pool error while lazy-loading
-        # `.participant`) and silently treat it as "not paid yet", which
-        # let the payout proceed anyway -- exactly the kind of blip seen
-        # under connection-pool exhaustion, and exactly how a genuine
-        # single-paid match could still get paid a second time. If we
-        # can't positively confirm the paid state, we must not pay.
         if not already_paid:
             slots = await self.slot_repo.list_for_tournament(tournament.id)
             already_paid = any(
@@ -294,7 +316,6 @@ class CustomMatchClaimService:
                     commit=False,
                 )
 
-        now = datetime.now(timezone.utc)
         if loser_claim is not None:
             await self.claim_repo.update(
                 loser_claim, status=CustomMatchClaimStatus.AUTO_RESOLVED, resolved_at=now
@@ -303,9 +324,6 @@ class CustomMatchClaimService:
             await self.claim_repo.update(
                 winner_claim, status=CustomMatchClaimStatus.AUTO_RESOLVED, resolved_at=now
             )
-        # Single commit for the whole locked critical section -- this is
-        # what releases the tournament row lock, so it must happen after
-        # every check/declare/pay step above, not before.
         await self.session.commit()
 
     # ------------------------------------------------------------------
