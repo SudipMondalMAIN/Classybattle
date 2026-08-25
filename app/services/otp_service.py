@@ -49,6 +49,13 @@ class OTPService:
                 "OTP request limit reached. Please try again after some time."
             )
 
+        one_day_ago = now - timedelta(days=1)
+        daily_count = await self.repo.count_recent(email, purpose, one_day_ago)
+        if daily_count >= settings.OTP_MAX_PER_DAY:
+            raise TooManyRequestsException(
+                "Daily OTP request limit reached for this email. Please try again tomorrow."
+            )
+
         # Invalidate any previously active OTPs for this purpose before issuing a new one
         await self.repo.invalidate_active_otps(email, purpose)
 

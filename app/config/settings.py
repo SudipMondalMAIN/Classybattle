@@ -50,6 +50,7 @@ class Settings(BaseSettings):
     OTP_MAX_ATTEMPTS: int = 5
     OTP_RESEND_COOLDOWN_SECONDS: int = 60
     OTP_MAX_PER_HOUR: int = 5
+    OTP_MAX_PER_DAY: int = 11
 
     # ---------------- SUPABASE ----------------
     SUPABASE_URL: str = ""
