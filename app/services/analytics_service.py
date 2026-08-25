@@ -110,6 +110,49 @@ class AnalyticsService:
         return data
 
     # ------------------------------------------------------------------
+    # Finance summary: deposits / withdrawals / profit
+    # ------------------------------------------------------------------
+    async def get_finance_summary(
+        self,
+        period_type: AnalyticsPeriodType,
+        start_date: Optional[date],
+        end_date: Optional[date],
+    ) -> dict:
+        end = (
+            datetime.combine(end_date, datetime.min.time(), tzinfo=timezone.utc) + timedelta(days=1)
+            if end_date
+            else datetime.now(timezone.utc)
+        )
+        if start_date:
+            start = datetime.combine(start_date, datetime.min.time(), tzinfo=timezone.utc)
+        else:
+            default_days = {"daily": 1, "weekly": 7, "monthly": 30, "custom": 30}
+            start = end - timedelta(days=default_days.get(period_type.value, 30))
+
+        if start >= end:
+            raise BadRequestException("start_date must be before end_date")
+
+        series = await self.repo.finance_series(start, end, period_type)
+
+        total_deposits = sum((float(row["total_deposits"]) for row in series), 0.0)
+        total_withdrawals = sum((float(row["total_withdrawals"]) for row in series), 0.0)
+        total_revenue = sum((float(row["entry_fee_revenue"]) for row in series), 0.0)
+        total_payouts = sum((float(row["prize_payouts"]) for row in series), 0.0)
+
+        return {
+            "period_type": period_type,
+            "range_start": start.date(),
+            "range_end": (end - timedelta(days=1)).date(),
+            "total_deposits": str(total_deposits),
+            "total_withdrawals": str(total_withdrawals),
+            "net_cash_flow": str(total_deposits - total_withdrawals),
+            "total_entry_fee_revenue": str(total_revenue),
+            "total_prize_payouts": str(total_payouts),
+            "platform_profit": str(total_revenue - total_payouts),
+            "series": series,
+        }
+
+    # ------------------------------------------------------------------
     # Generic analytics (metric + period type + optional custom range)
     # ------------------------------------------------------------------
     async def get_analytics(

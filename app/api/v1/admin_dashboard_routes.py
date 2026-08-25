@@ -57,6 +57,20 @@ async def monthly_statistics(
     return await service.get_monthly_statistics(year, month)
 
 
+@router.get("/finance/summary")
+async def finance_summary(
+    period_type: AnalyticsPeriodType = Query(AnalyticsPeriodType.DAILY),
+    start_date: Optional[date] = Query(None),
+    end_date: Optional[date] = Query(None),
+    _admin: User = Depends(require_admin),
+    session: AsyncSession = Depends(get_db_session),
+):
+    """Total deposits, total withdrawals, and profit (deposits - withdrawals)
+    for the given period/range, plus a per-bucket breakdown table."""
+    service = AnalyticsService(session)
+    return await service.get_finance_summary(period_type, start_date, end_date)
+
+
 @router.get("/analytics/{metric}", response_model=AnalyticsResponse)
 async def get_analytics(
     metric: str,

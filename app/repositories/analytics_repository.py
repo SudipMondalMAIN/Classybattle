@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 
 from app.models.participant import Participant
+from app.models.payment import PaymentRequest, PaymentRequestStatus
 from app.models.prize import PrizePayout, PrizePayoutStatus, PrizePool
 from app.models.security import AnalyticsMetricType, AnalyticsPeriodType, AnalyticsSnapshot
 from app.models.team import Team
@@ -27,6 +28,7 @@ from app.models.wallet_transaction import (
     WalletTransactionStatus,
     WalletTransactionType,
 )
+from app.models.withdrawal import WithdrawalRequest, WithdrawalStatus
 
 
 class AnalyticsRepository:
@@ -196,6 +198,103 @@ class AnalyticsRepository:
         )
         result = await self.session.execute(stmt)
         return result.all()
+
+    async def finance_series(
+        self, start: datetime, end: datetime, period_type: AnalyticsPeriodType
+    ) -> Sequence[dict[str, Any]]:
+        """Per-bucket deposit / withdrawal / entry-fee-revenue / prize-payout
+        breakdown.
+
+        - Deposits = sum of APPROVED payment requests (admin-verified UPI deposits).
+        - Withdrawals = sum of COMPLETED withdrawal requests (actually paid out).
+        - Entry-fee revenue = sum of successful DEBIT wallet transactions
+          (tournament/team/slot entry fees -- what the platform actually earns).
+        - Prize payouts = sum of PAID prize payouts (what the platform actually
+          pays back out to winners).
+        - platform_profit = entry_fee_revenue - prize_payouts (the real
+          operating margin; independent of deposit/withdrawal cash flow,
+          since a deposit isn't income and a withdrawal isn't a cost -- it's
+          the user's own money moving in/out of their wallet).
+        - net_cash_flow = deposits - withdrawals (separate view: raw cash in
+          vs cash out through the payment gateway side).
+        """
+        dep_bucket = self._bucket_expr(PaymentRequest.updated_at, period_type)
+        dep_stmt = (
+            select(dep_bucket.label("bucket"), func.coalesce(func.sum(PaymentRequest.amount), 0))
+            .where(
+                PaymentRequest.updated_at >= start,
+                PaymentRequest.updated_at < end,
+                PaymentRequest.status == PaymentRequestStatus.APPROVED,
+            )
+            .group_by(dep_bucket)
+        )
+        deposit_rows = (await self.session.execute(dep_stmt)).all()
+        deposits_by_bucket = {row[0]: Decimal(row[1]) for row in deposit_rows}
+
+        wd_bucket = self._bucket_expr(WithdrawalRequest.updated_at, period_type)
+        wd_stmt = (
+            select(wd_bucket.label("bucket"), func.coalesce(func.sum(WithdrawalRequest.amount), 0))
+            .where(
+                WithdrawalRequest.updated_at >= start,
+                WithdrawalRequest.updated_at < end,
+                WithdrawalRequest.status == WithdrawalStatus.COMPLETED,
+            )
+            .group_by(wd_bucket)
+        )
+        withdrawal_rows = (await self.session.execute(wd_stmt)).all()
+        withdrawals_by_bucket = {row[0]: Decimal(row[1]) for row in withdrawal_rows}
+
+        rev_bucket = self._bucket_expr(WalletTransaction.created_at, period_type)
+        rev_stmt = (
+            select(rev_bucket.label("bucket"), func.coalesce(func.sum(WalletTransaction.amount), 0))
+            .where(
+                WalletTransaction.created_at >= start,
+                WalletTransaction.created_at < end,
+                WalletTransaction.status == WalletTransactionStatus.SUCCESS,
+                WalletTransaction.type == WalletTransactionType.DEBIT,
+            )
+            .group_by(rev_bucket)
+        )
+        revenue_rows = (await self.session.execute(rev_stmt)).all()
+        revenue_by_bucket = {row[0]: Decimal(row[1]) for row in revenue_rows}
+
+        payout_bucket = self._bucket_expr(PrizePayout.updated_at, period_type)
+        payout_stmt = (
+            select(payout_bucket.label("bucket"), func.coalesce(func.sum(PrizePayout.amount), 0))
+            .where(
+                PrizePayout.updated_at >= start,
+                PrizePayout.updated_at < end,
+                PrizePayout.status == PrizePayoutStatus.PAID,
+            )
+            .group_by(payout_bucket)
+        )
+        payout_rows = (await self.session.execute(payout_stmt)).all()
+        payouts_by_bucket = {row[0]: Decimal(row[1]) for row in payout_rows}
+
+        buckets = sorted(
+            set(deposits_by_bucket)
+            | set(withdrawals_by_bucket)
+            | set(revenue_by_bucket)
+            | set(payouts_by_bucket)
+        )
+        series = []
+        for bucket in buckets:
+            deposits = deposits_by_bucket.get(bucket, Decimal(0))
+            withdrawals = withdrawals_by_bucket.get(bucket, Decimal(0))
+            revenue = revenue_by_bucket.get(bucket, Decimal(0))
+            payouts = payouts_by_bucket.get(bucket, Decimal(0))
+            series.append(
+                {
+                    "period_start": bucket.isoformat() if hasattr(bucket, "isoformat") else str(bucket),
+                    "total_deposits": str(deposits),
+                    "total_withdrawals": str(withdrawals),
+                    "net_cash_flow": str(deposits - withdrawals),
+                    "entry_fee_revenue": str(revenue),
+                    "prize_payouts": str(payouts),
+                    "platform_profit": str(revenue - payouts),
+                }
+            )
+        return series
 
     async def revenue_series(
         self, start: datetime, end: datetime, period_type: AnalyticsPeriodType
