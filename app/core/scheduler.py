@@ -31,6 +31,7 @@ from datetime import datetime, timedelta, timezone
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
+from app.core.cache import cache_delete_prefix
 from app.core.logging import get_logger
 from app.database.session import AsyncSessionLocal
 from app.models.tournament import TournamentStatus
@@ -55,6 +56,10 @@ async def _auto_complete_live_tournaments() -> None:
             completed_count = await tournament_service.auto_complete_due_tournaments()
             if completed_count:
                 logger.info("live_auto_complete", tournaments=completed_count)
+                # Status changed under the route layer's back -- wipe the
+                # tournament cache namespace so clients don't keep polling
+                # a stale LIVE status after this flips to COMPLETED.
+                await cache_delete_prefix("tournament:")
         except Exception:  # noqa: BLE001 - never let the scheduler die
             logger.exception("live_auto_complete_failed")
             await session.rollback()
@@ -104,6 +109,9 @@ async def _daily_slot_rollover() -> None:
                     )
 
             await session.commit()
+            # New slots created / old ones archived outside the route
+            # layer -- wipe the tournament cache namespace.
+            await cache_delete_prefix("tournament:")
         except Exception:  # noqa: BLE001 - never let the scheduler die
             logger.exception("daily_slot_rollover_failed")
             await session.rollback()

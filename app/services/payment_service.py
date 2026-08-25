@@ -50,6 +50,7 @@ from uuid import UUID
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.cache import cache_delete, cache_get, cache_set
 from app.core.exceptions import (
     BadRequestException,
     ConflictException,
@@ -77,6 +78,15 @@ from app.services.wallet_service import WalletService
 from app.utils.txn_id import generate_unique_txn_no
 
 _ADMIN_ROLES = (UserRole.ADMIN, UserRole.SUPER_ADMIN)
+
+# PaymentSettings is a single, rarely-changed row (merchant UPI id, min/max
+# deposit & withdrawal amounts) that's read on nearly every deposit and
+# withdrawal request -- a prime candidate for caching. These values change
+# very rarely (admin sets them once, tweaks occasionally), so cache for a
+# full day; update_settings() actively invalidates this key so an admin
+# change is reflected immediately regardless of TTL.
+_PAYMENT_SETTINGS_CACHE_KEY = "payment_settings:singleton"
+_PAYMENT_SETTINGS_CACHE_TTL = 86400
 _TERMINAL_STATUSES = (
     PaymentRequestStatus.APPROVED,
     PaymentRequestStatus.REJECTED,
@@ -116,6 +126,31 @@ class PaymentService:
             settings_row = await self.settings_repo.create()
             await self.session.commit()
         return settings_row
+
+    async def get_settings_cached(self) -> dict:
+        """Same data as get_settings(), but returned as a plain dict and
+        served from Redis when possible -- callers that only need to
+        read the values (deposit QR generation, the public settings
+        endpoint, deposit/withdrawal amount validation) should use this
+        instead of get_settings() to avoid hitting Postgres on every
+        call. Falls back to the DB transparently on a cache miss."""
+        cached = await cache_get(_PAYMENT_SETTINGS_CACHE_KEY)
+        if cached is not None:
+            return cached
+
+        settings_row = await self.get_settings()
+        data = {
+            "upi_id": settings_row.upi_id,
+            "merchant_name": settings_row.merchant_name,
+            "payment_note": settings_row.payment_note,
+            "is_upi_enabled": settings_row.is_upi_enabled,
+            "min_deposit_amount": str(settings_row.min_deposit_amount),
+            "max_deposit_amount": str(settings_row.max_deposit_amount),
+            "min_withdrawal_amount": str(settings_row.min_withdrawal_amount),
+            "max_withdrawal_amount": str(settings_row.max_withdrawal_amount),
+        }
+        await cache_set(_PAYMENT_SETTINGS_CACHE_KEY, data, ttl=_PAYMENT_SETTINGS_CACHE_TTL)
+        return data
 
     async def update_settings(
         self, *, admin: User, payload: dict
@@ -166,6 +201,7 @@ class PaymentService:
 
         await self.session.commit()
         await self.session.refresh(settings_row)
+        await cache_delete(_PAYMENT_SETTINGS_CACHE_KEY)
         return settings_row
 
     # ------------------------------------------------------------------

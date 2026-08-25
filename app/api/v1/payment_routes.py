@@ -54,8 +54,8 @@ async def get_payment_settings(
     session: AsyncSession = Depends(get_db_session),
 ):
     service = PaymentService(session)
-    settings_row = await service.get_settings()
-    return PaymentSettingsRead.model_validate(settings_row)
+    settings_data = await service.get_settings_cached()
+    return PaymentSettingsRead.model_validate(settings_data)
 
 
 # ----------------------------------------------------------------------

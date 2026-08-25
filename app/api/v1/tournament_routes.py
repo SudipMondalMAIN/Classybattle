@@ -8,6 +8,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, File, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.cache import cache_delete_prefix, cache_get, cache_set
 from app.core.exceptions import ValidationException
 from app.database.session import get_db_session
 from app.dependencies.auth import (
@@ -33,6 +34,31 @@ from app.schemas.tournament import (
 from app.services.tournament_service import TournamentService
 
 router = APIRouter(prefix="/tournaments", tags=["Tournaments"])
+
+# Tournaments are read constantly (home feed, browse, polling for status/
+# room updates) but only mutated by admins/hosts occasionally, so caching
+# reads and invalidating the whole namespace on any write is a big win.
+# Kept short (list) / moderate (detail) since room_id/room_password and
+# status are time-sensitive -- a stale cache must never outlive a real
+# publish-room/status-change by more than a few seconds.
+_CACHE_PREFIX = "tournament:"
+# Every mutation path (update, status change, publish-room, delete,
+# banner/cover upload, plus the background scheduler's auto-complete and
+# daily rollover) explicitly invalidates this cache immediately, so a
+# long TTL is safe -- nothing goes stale between changes, it just skips
+# the DB entirely until something actually changes.
+_LIST_TTL = 300
+_DETAIL_TTL = 3600
+# Terminal states (see TOURNAMENT_STATUS_TRANSITIONS) never change again,
+# so their detail payload is cached even longer as a nice-to-have (not
+# strictly needed since invalidation already handles freshness, but
+# there's zero chance a completed match's data changes).
+_TERMINAL_STATUSES = {TournamentStatus.COMPLETED, TournamentStatus.CANCELLED}
+_TERMINAL_DETAIL_TTL = 86400
+
+
+async def _invalidate_tournament_cache() -> None:
+    await cache_delete_prefix(_CACHE_PREFIX)
 
 # Convenience aliases the frontend can send instead of (or alongside) the
 # exact TournamentStatus enum values.
@@ -77,6 +103,7 @@ async def create_tournament(
 ):
     service = TournamentService(session)
     tournament = await service.create_tournament(payload, current_user)
+    await _invalidate_tournament_cache()
     return TournamentRead.model_validate(tournament)
 
 
@@ -91,6 +118,7 @@ async def create_custom_tournament(
     admin approval needed."""
     service = TournamentService(session)
     tournament = await service.create_custom_tournament(payload, current_user)
+    await _invalidate_tournament_cache()
     return TournamentRead.model_validate(tournament)
 
 
@@ -118,6 +146,14 @@ async def list_tournaments(
     sort_order: str = Query("asc", pattern="^(?i)(asc|desc)$"),
     session: AsyncSession = Depends(get_db_session),
 ):
+    cache_key = (
+        f"{_CACHE_PREFIX}list:{page}:{page_size}:{game_id}:{status}:{visibility}:"
+        f"{is_featured}:{category}:{format}:{is_custom}:{search}:{sort_by}:{sort_order}"
+    )
+    cached = await cache_get(cache_key)
+    if cached is not None:
+        return PaginatedTournaments.model_validate(cached)
+
     service = TournamentService(session)
     items, total = await service.list_tournaments(
         page=page,
@@ -135,13 +171,15 @@ async def list_tournaments(
         requesting_user=None,
     )
     total_pages = math.ceil(total / page_size) if total else 0
-    return PaginatedTournaments(
+    result = PaginatedTournaments(
         items=[TournamentListItem.model_validate(t) for t in items],
         total=total,
         page=page,
         page_size=page_size,
         total_pages=total_pages,
     )
+    await cache_set(cache_key, result.model_dump(mode="json"), ttl=_LIST_TTL)
+    return result
 
 
 @router.get("/slug/{slug}", response_model=TournamentRead)
@@ -150,9 +188,20 @@ async def get_tournament_by_slug(
     current_user: Optional[User] = Depends(get_current_user_optional),
     session: AsyncSession = Depends(get_db_session),
 ):
+    # Keyed per-viewer (not just per-tournament) since room_id/room_password
+    # visibility depends on who's asking -- never share one cached payload
+    # across a participant and a stranger.
+    cache_key = f"{_CACHE_PREFIX}slug:{slug}:{current_user.id if current_user else 'anon'}"
+    cached = await cache_get(cache_key)
+    if cached is not None:
+        return TournamentRead.model_validate(cached)
+
     service = TournamentService(session)
     tournament = await service.get_by_slug(slug)
-    return await _to_tournament_read(service, tournament, current_user)
+    result = await _to_tournament_read(service, tournament, current_user)
+    ttl = _TERMINAL_DETAIL_TTL if tournament.status in _TERMINAL_STATUSES else _DETAIL_TTL
+    await cache_set(cache_key, result.model_dump(mode="json"), ttl=ttl)
+    return result
 
 
 @router.get("/short/{short_id}", response_model=TournamentRead)
@@ -173,9 +222,22 @@ async def get_tournament(
     current_user: Optional[User] = Depends(get_current_user_optional),
     session: AsyncSession = Depends(get_db_session),
 ):
+    cache_key = f"{_CACHE_PREFIX}id:{tournament_id}:{current_user.id if current_user else 'anon'}"
+    cached = await cache_get(cache_key)
+    if cached is not None:
+        return TournamentRead.model_validate(cached)
+
     service = TournamentService(session)
     tournament = await service.get_by_id(tournament_id)
-    return await _to_tournament_read(service, tournament, current_user)
+    result = await _to_tournament_read(service, tournament, current_user)
+    # COMPLETED/CANCELLED are terminal states (see TOURNAMENT_STATUS_TRANSITIONS
+    # in app/models/tournament.py -- COMPLETED has no outgoing transitions),
+    # so once a tournament reaches one, its data can never change again.
+    # Cache it far longer instead of re-hitting the DB every 30s for a
+    # match that's already over.
+    ttl = _TERMINAL_DETAIL_TTL if tournament.status in _TERMINAL_STATUSES else _DETAIL_TTL
+    await cache_set(cache_key, result.model_dump(mode="json"), ttl=ttl)
+    return result
 
 
 @router.patch("/{tournament_id}", response_model=TournamentRead)
@@ -187,6 +249,7 @@ async def update_tournament(
 ):
     service = TournamentService(session)
     tournament = await service.update_tournament(tournament_id, payload, current_user)
+    await _invalidate_tournament_cache()
     return TournamentRead.model_validate(tournament)
 
 
@@ -199,6 +262,7 @@ async def update_tournament_status(
 ):
     service = TournamentService(session)
     tournament = await service.update_status(tournament_id, payload.status, current_user)
+    await _invalidate_tournament_cache()
     return TournamentRead.model_validate(tournament)
 
 
@@ -216,6 +280,7 @@ async def publish_room(
     tournament = await service.publish_room(
         tournament_id, payload.room_id, payload.room_password, current_user
     )
+    await _invalidate_tournament_cache()
     return TournamentRead.model_validate(tournament)
 
 
@@ -239,6 +304,7 @@ async def delete_tournament(
 ):
     service = TournamentService(session)
     await service.soft_delete_tournament(tournament_id, current_user)
+    await _invalidate_tournament_cache()
     return MessageResponse(message="Tournament deleted successfully")
 
 
@@ -256,6 +322,7 @@ async def upload_tournament_banner(
     tournament = await service.upload_banner(
         tournament_id, file_bytes, file.content_type, current_user
     )
+    await _invalidate_tournament_cache()
     return TournamentAssetUploadResponse(url=tournament.banner_url)
 
 
@@ -273,4 +340,5 @@ async def upload_tournament_cover(
     tournament = await service.upload_cover(
         tournament_id, file_bytes, file.content_type, current_user
     )
+    await _invalidate_tournament_cache()
     return TournamentAssetUploadResponse(url=tournament.cover_url)
