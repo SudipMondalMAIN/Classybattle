@@ -406,6 +406,22 @@ class ParticipantService:
         await self.session.commit()
         await self.session.refresh(participant)
 
+        if entry_fee_required:
+            try:
+                from app.services.referral_service import ReferralService
+
+                await ReferralService(self.session).record_tournament_join_progress(
+                    current_user, tournament
+                )
+            except Exception as exc:  # noqa: BLE001 - referral progress must never break registration
+                from app.core.logging import get_logger
+
+                get_logger("participant_service").warning(
+                    "referral_tournament_progress_failed",
+                    user_id=str(current_user.id),
+                    error=str(exc),
+                )
+
         # A "slot" row is what the admin Players/Results panel, check-in and
         # room-publish flow read from -- registering here without one meant
         # players who joined via /register never showed up as joined even

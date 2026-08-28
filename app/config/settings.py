@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     APP_ENV: str = "development"
     APP_DEBUG: bool = False
     API_V1_PREFIX: str = "/api/v1"
+    API_V2_PREFIX: str = "/api/v2"
     SECRET_KEY: str
 
     # ---------------- DATABASE ----------------

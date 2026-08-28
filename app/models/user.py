@@ -31,6 +31,13 @@ class User(ShortIdMixin, BaseModel):
     phone_number: Mapped[str] = mapped_column(String(20), unique=True, index=True, nullable=False)
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     player_uid: Mapped[str] = mapped_column(String(8), unique=True, index=True, nullable=False)
+    # Referral System v2 -- every user's own shareable code (referrals.py
+    # apply endpoint looks another user up by this). Nullable only for the
+    # brief moment before ReferralService lazily backfills it on an old
+    # user's first referral-related request; new signups get one immediately.
+    referral_code: Mapped[Optional[str]] = mapped_column(
+        String(16), unique=True, index=True, nullable=True
+    )
 
     role: Mapped[UserRole] = mapped_column(
         str_enum(UserRole, "user_role"), default=UserRole.USER, nullable=False

@@ -9,6 +9,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
 from app.api.v1.router import api_v1_router
+from app.api.v2.router import api_v2_router
 from app.config.settings import settings
 from app.core.logging import configure_logging, get_logger
 from app.core.scheduler import start_slot_scheduler, stop_slot_scheduler
@@ -69,6 +70,7 @@ def create_app() -> FastAPI:
 
     # Routes
     app.include_router(api_v1_router, prefix=settings.API_V1_PREFIX)
+    app.include_router(api_v2_router, prefix=settings.API_V2_PREFIX)
 
     return app
 

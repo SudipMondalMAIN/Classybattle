@@ -752,6 +752,38 @@ class WalletService:
             await self.session.commit()
         return txn
 
+    async def credit_referral_reward(
+        self,
+        user: User,
+        *,
+        amount: Decimal,
+        reference_type: Optional[str] = None,
+        reference_id: Optional[str] = None,
+        description: Optional[str] = None,
+        metadata: Optional[dict] = None,
+        commit: bool = True,
+    ) -> WalletTransaction:
+        """Referral System v2: unlike admin bonuses (winnings_balance),
+        referral rewards and milestone bonuses land in deposit_balance --
+        the "Add Money" balance -- per product spec (usable to join
+        tournaments, not separately withdrawable)."""
+        await self.get_or_create_wallet(user, commit=commit)
+        txn = await self._mutate(
+            user_id=user.id,
+            type_=WalletTransactionType.BONUS,
+            amount=amount,
+            deposit_delta=amount,
+            winnings_delta=Decimal("0"),
+            balance_source=WalletBalanceSource.DEPOSIT,
+            description=description,
+            reference_type=reference_type,
+            reference_id=reference_id,
+            metadata=metadata,
+        )
+        if commit:
+            await self.session.commit()
+        return txn
+
     # ------------------------------------------------------------------
     # Admin operations
     # ------------------------------------------------------------------

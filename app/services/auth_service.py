@@ -47,6 +47,15 @@ class AuthService:
         self.refresh_token_repo = RefreshTokenRepository(session)
         self.otp_service = OTPService(session)
 
+    async def _generate_unique_referral_code(self) -> str:
+        """Generate a referral_code, retrying on the rare collision."""
+        from app.core.referral_code import generate_referral_code
+
+        while True:
+            candidate = generate_referral_code()
+            if await self.user_repo.get_by_referral_code(candidate) is None:
+                return candidate
+
     async def _generate_unique_player_uid(self) -> str:
         """Generate a player_uid, retrying on the rare collision."""
         for _ in range(10):
@@ -126,6 +135,7 @@ class AuthService:
             is_email_verified=True,
             is_active=True,
             player_uid=await self._generate_unique_player_uid(),
+            referral_code=await self._generate_unique_referral_code(),
             avatar_id=random.choice(PREDEFINED_AVATARS),
         )
 

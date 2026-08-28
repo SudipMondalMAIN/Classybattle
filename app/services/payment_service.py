@@ -51,6 +51,9 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.cache import cache_delete, cache_get, cache_set
+from app.core.logging import get_logger
+
+logger = get_logger("payment_service")
 from app.core.exceptions import (
     BadRequestException,
     ConflictException,
@@ -488,6 +491,19 @@ class PaymentService:
 
         await self.session.commit()
         await self.session.refresh(payment_request)
+
+        try:
+            from app.services.referral_service import ReferralService
+
+            await ReferralService(self.session).record_deposit_progress(
+                target_user, payment_request.amount
+            )
+        except Exception as exc:  # noqa: BLE001 - referral progress must never break a deposit approval
+            logger.warning(
+                "referral_deposit_progress_failed",
+                user_id=str(target_user.id),
+                error=str(exc),
+            )
 
         try:
             await NotificationDispatchService(self.session).dispatch(

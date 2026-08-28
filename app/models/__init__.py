@@ -144,6 +144,13 @@ from app.models.tournament import (
     TournamentVisibility,
 )
 from app.models.user import User
+from app.models.referral import (
+    DEFAULT_MILESTONE_RULES,
+    Referral,
+    ReferralConfig,
+    ReferralMilestoneClaim,
+    ReferralStatus,
+)
 from app.models.wallet import Wallet
 from app.models.wallet_transaction import (
     WalletTransaction,

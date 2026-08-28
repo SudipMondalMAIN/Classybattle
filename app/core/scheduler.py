@@ -78,12 +78,25 @@ async def _daily_slot_rollover() -> None:
     yesterday = today - timedelta(days=1)
 
     async with AsyncSessionLocal() as session:
-        try:
-            tournament_repo = TournamentRepository(session)
-            generator = SlotGeneratorService(session)
-            schedules = await tournament_repo.list_active_recurring_schedules()
+        tournament_repo = TournamentRepository(session)
+        generator = SlotGeneratorService(session)
 
-            for schedule in schedules:
+        try:
+            schedules = await tournament_repo.list_active_recurring_schedules()
+        except Exception:  # noqa: BLE001 - never let the scheduler die
+            logger.exception("daily_slot_rollover_failed_listing_schedules")
+            await session.rollback()
+            return
+
+        any_failed = False
+        for schedule in schedules:
+            # Each schedule gets its own try/except now -- one bad schedule
+            # (missing/invalid daily_slot_times, bad game_id, etc.) used to
+            # raise and abort the WHOLE loop before session.commit(), which
+            # silently skipped archiving + generation for every OTHER
+            # schedule too. Now a failing schedule just logs and the rest
+            # still get processed and committed.
+            try:
                 stale_slots = await tournament_repo.list_generated_slots_for_template(
                     schedule.slug, yesterday.isoformat()
                 )
@@ -97,6 +110,7 @@ async def _daily_slot_rollover() -> None:
                     logger.info(
                         "daily_slot_archive",
                         tournament_id=str(schedule.id),
+                        slug=schedule.slug,
                         archived=archived,
                     )
 
@@ -105,16 +119,35 @@ async def _daily_slot_rollover() -> None:
                     logger.info(
                         "daily_slot_generate",
                         tournament_id=str(schedule.id),
+                        slug=schedule.slug,
                         matches=len(created),
                     )
+            except Exception:  # noqa: BLE001 - one bad schedule must not block the rest
+                any_failed = True
+                logger.exception(
+                    "daily_slot_rollover_schedule_failed",
+                    tournament_id=str(schedule.id),
+                    slug=schedule.slug,
+                    daily_slot_times=schedule.daily_slot_times,
+                )
+                # Roll back only this schedule's partial work, then keep
+                # going with a session that's still usable for the rest.
+                await session.rollback()
 
+        try:
             await session.commit()
             # New slots created / old ones archived outside the route
             # layer -- wipe the tournament cache namespace.
             await cache_delete_prefix("tournament:")
         except Exception:  # noqa: BLE001 - never let the scheduler die
-            logger.exception("daily_slot_rollover_failed")
+            logger.exception("daily_slot_rollover_commit_failed")
             await session.rollback()
+
+        if any_failed:
+            logger.warning(
+                "daily_slot_rollover_completed_with_errors",
+                total_schedules=len(schedules),
+            )
 
 
 def start_slot_scheduler() -> None:

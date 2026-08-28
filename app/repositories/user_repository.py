@@ -36,6 +36,13 @@ class UserRepository(BaseRepository[User]):
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
+    async def get_by_referral_code(self, referral_code: str, include_deleted: bool = False) -> Optional[User]:
+        stmt = select(User).where(func.upper(User.referral_code) == referral_code.strip().upper())
+        if not include_deleted:
+            stmt = stmt.where(User.deleted_at.is_(None))
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
     async def exists_by_email_or_phone(self, email: str, phone_number: str) -> Optional[User]:
         stmt = select(User).where(
             or_(User.email == email.lower(), User.phone_number == phone_number),
