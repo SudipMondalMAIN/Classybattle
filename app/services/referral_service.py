@@ -105,6 +105,13 @@ class ReferralService:
         panel never shows a stale value right after another admin's edit."""
         return await self.config_repo.get_singleton()
 
+    async def get_rules_for_user(self) -> ReferralConfig:
+        """User-facing "how it works" rules -- reuses the cached config
+        (same one hot referral evaluation reads), so the app always
+        reflects whatever the admin has configured, never a hardcoded
+        value baked into the client."""
+        return await self.get_config()
+
     async def update_config(self, *, admin: User, update_data: dict) -> ReferralConfig:
         if admin.role not in _ADMIN_ROLES:
             raise ForbiddenException("Only admins can update referral configuration")

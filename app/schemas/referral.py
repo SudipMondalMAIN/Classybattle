@@ -25,6 +25,24 @@ class MyReferralCodeResponse(BaseModel):
     next_milestone_bonus: Optional[Decimal] = None
 
 
+class ReferralMilestoneRuleOut(BaseModel):
+    threshold: int
+    bonus: Decimal
+
+
+class ReferralRulesResponse(BaseModel):
+    """Public-facing version of ReferralConfig -- everything the app
+    needs to explain "how it works" and "how much you earn" to a user,
+    with no admin/fraud-only fields (max_accounts_per_ip,
+    fraud_check_enabled) leaked to the client."""
+    reward_amount: Decimal
+    min_deposit_amount: Decimal
+    require_deposit_step: bool
+    require_paid_tournament_step: bool
+    apply_window_days: int
+    milestone_rules: list[ReferralMilestoneRuleOut]
+
+
 class ApplyReferralCodeRequest(BaseModel):
     referral_code: str = Field(..., min_length=1, max_length=16)
     # Client-supplied device identifier (Flutter installation/device id),

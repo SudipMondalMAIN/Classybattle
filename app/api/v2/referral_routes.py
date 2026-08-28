@@ -14,11 +14,32 @@ from app.models.user import User
 from app.schemas.referral import (
     ApplyReferralCodeRequest,
     MyReferralCodeResponse,
+    ReferralRulesResponse,
     ReferralStatusItem,
 )
 from app.services.referral_service import ReferralService
 
 router = APIRouter(prefix="/referrals", tags=["Referrals"])
+
+
+@router.get("/rules", response_model=ReferralRulesResponse)
+async def get_referral_rules(
+    session: AsyncSession = Depends(get_db_session),
+):
+    """Public "how it works" rules for the Refer & Earn screen -- reward
+    amount, whether a deposit/paid-tournament step is required (and the
+    minimum deposit), the apply window, and the milestone bonus ladder.
+    No login required so the screen can show this even before signup."""
+    service = ReferralService(session)
+    config = await service.get_rules_for_user()
+    return ReferralRulesResponse(
+        reward_amount=config.reward_amount,
+        min_deposit_amount=config.min_deposit_amount,
+        require_deposit_step=config.require_deposit_step,
+        require_paid_tournament_step=config.require_paid_tournament_step,
+        apply_window_days=config.apply_window_days,
+        milestone_rules=config.milestone_rules,
+    )
 
 
 @router.get("/my-code", response_model=MyReferralCodeResponse)
