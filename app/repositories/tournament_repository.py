@@ -16,6 +16,15 @@ from app.models.tournament import (
 from app.models.user import User, UserRole
 from app.repositories.base import BaseRepository
 
+_NAMED_FORMAT_CATEGORIES = {
+    "cs_1v1": ScheduleCategory.CS_1V1,
+    "cs_head": ScheduleCategory.CS_HEAD,
+    "cs_4v4": ScheduleCategory.CS_4V4,
+    "lw_1v1": ScheduleCategory.LW_1V1,
+    "lw_head": ScheduleCategory.LW_HEAD,
+    "br_survive": ScheduleCategory.BR_SURVIVE,
+}
+
 _SORTABLE_FIELDS = {
     "created_at": Tournament.created_at,
     "starts_at": Tournament.starts_at,
@@ -184,7 +193,11 @@ class TournamentRepository(BaseRepository[Tournament]):
             # tournaments -- see slot_generator_service.py). free/custom
             # are independent axes and can be combined with the others
             # by the caller passing both `format` and `is_custom`, or
-            # just entry_fee via `format=free`.
+            # just entry_fee via `format=free`. The named formats
+            # (cs_1v1/cs_head/cs_4v4/lw_1v1/lw_head/br_survive) are plain
+            # labels stored on Tournament.category -- same join mechanics
+            # as solo/duo/squad, just a different filter/browse-page value
+            # (mode_id/GameMode are unused here).
             fmt = format.strip().lower()
             if fmt == "solo":
                 conditions.append(Tournament.team_size == 1)
@@ -200,6 +213,8 @@ class TournamentRepository(BaseRepository[Tournament]):
                 )
                 conditions.append(Tournament.created_by.is_not(None))
                 conditions.append(Tournament.created_by.not_in(admin_creator_ids))
+            elif fmt in _NAMED_FORMAT_CATEGORIES:
+                conditions.append(Tournament.category == _NAMED_FORMAT_CATEGORIES[fmt])
         if is_custom is not None:
             # "Custom" tournaments are user-hosted (created_by a regular
             # user), as opposed to admin-created / schedule-generated slots

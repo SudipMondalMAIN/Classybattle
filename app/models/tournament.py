@@ -76,11 +76,24 @@ class ScheduleCategory(str, enum.Enum):
     admin-configurable). No map/mode picking needed; Admin only
     configures tournaments-per-day, per-tournament time, entry fee and
     prize pool for each.
+
+    The CS_*/LW_*/BR_SURVIVE values below are additional named formats
+    (Clash Squad 1v1/Headshot/4v4, Lone Wolf 1v1/Headshot, Battle Royale
+    Survival) -- distinct browse-page/filter labels, same join mechanics
+    as their team-size counterpart (join/register flow doesn't branch on
+    these; only the "Browse Tournaments" filter and home-screen category
+    boxes read this value).
     """
 
     SOLO = "solo"
     DUO = "duo"
     SQUAD = "squad"
+    CS_1V1 = "cs_1v1"
+    CS_HEAD = "cs_head"
+    CS_4V4 = "cs_4v4"
+    LW_1V1 = "lw_1v1"
+    LW_HEAD = "lw_head"
+    BR_SURVIVE = "br_survive"
 
 
 class TeamFormat(str, enum.Enum):

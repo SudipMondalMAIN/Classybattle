@@ -26,6 +26,12 @@ class HomeCategoryBoxType(str, enum.Enum):
     SQUAD = "squad"
     FREE = "free"
     CUSTOM = "custom"
+    CS_1V1 = "cs_1v1"
+    CS_HEAD = "cs_head"
+    CS_4V4 = "cs_4v4"
+    LW_1V1 = "lw_1v1"
+    LW_HEAD = "lw_head"
+    BR_SURVIVE = "br_survive"
 
 
 class HomeCategoryBox(BaseModel):
