@@ -23,6 +23,12 @@ class MyReferralCodeResponse(BaseModel):
     total_earned: Decimal
     next_milestone_at: Optional[int] = None
     next_milestone_bonus: Optional[Decimal] = None
+    # Whether THIS user has already applied someone else's code as a
+    # referee. Once true it stays true forever (uq on referee_id), so
+    # the client can permanently hide the "apply a code" box instead of
+    # relying on a local, ephemeral "just applied" flag that resets on
+    # screen rebuild/navigation.
+    has_applied_referral_code: bool = False
 
 
 class ReferralMilestoneRuleOut(BaseModel):

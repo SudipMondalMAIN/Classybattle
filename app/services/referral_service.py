@@ -179,6 +179,8 @@ class ReferralService:
             None,
         )
 
+        applied_as_referee = await self.referral_repo.get_by_referee_id(user.id)
+
         return {
             "referral_code": code,
             "total_referred": len(referrals),
@@ -188,6 +190,7 @@ class ReferralService:
             "total_earned": total_earned,
             "next_milestone_at": next_milestone["threshold"] if next_milestone else None,
             "next_milestone_bonus": Decimal(next_milestone["bonus"]) if next_milestone else None,
+            "has_applied_referral_code": applied_as_referee is not None,
         }
 
     async def list_my_referrals(self, user: User) -> list[Referral]:
