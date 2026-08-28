@@ -143,6 +143,7 @@ class PaymentService:
 
         settings_row = await self.get_settings()
         data = {
+            "id": str(settings_row.id),
             "upi_id": settings_row.upi_id,
             "merchant_name": settings_row.merchant_name,
             "payment_note": settings_row.payment_note,
@@ -151,6 +152,8 @@ class PaymentService:
             "max_deposit_amount": str(settings_row.max_deposit_amount),
             "min_withdrawal_amount": str(settings_row.min_withdrawal_amount),
             "max_withdrawal_amount": str(settings_row.max_withdrawal_amount),
+            "updated_by_id": str(settings_row.updated_by_id) if settings_row.updated_by_id else None,
+            "updated_at": settings_row.updated_at.isoformat(),
         }
         await cache_set(_PAYMENT_SETTINGS_CACHE_KEY, data, ttl=_PAYMENT_SETTINGS_CACHE_TTL)
         return data
