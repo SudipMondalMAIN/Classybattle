@@ -144,6 +144,23 @@ class SlotJoinService:
         )
         await self.session.commit()
         await self.session.refresh(slot)
+
+        if tournament.entry_fee and tournament.entry_fee > 0:
+            try:
+                from app.services.referral_service import ReferralService
+
+                await ReferralService(self.session).record_tournament_join_progress(
+                    current_user, tournament
+                )
+            except Exception as exc:  # noqa: BLE001 - referral progress must never break a join
+                from app.core.logging import get_logger
+
+                get_logger("slot_join_service").warning(
+                    "referral_tournament_progress_failed",
+                    user_id=str(current_user.id),
+                    error=str(exc),
+                )
+
         return slot
 
     # ------------------------------------------------------------------
@@ -292,4 +309,21 @@ class SlotJoinService:
 
         await self.session.commit()
         await self.session.refresh(tournament_team)
+
+        if tournament.entry_fee and tournament.entry_fee > 0:
+            try:
+                from app.services.referral_service import ReferralService
+
+                await ReferralService(self.session).record_tournament_join_progress(
+                    current_user, tournament
+                )
+            except Exception as exc:  # noqa: BLE001 - referral progress must never break a join
+                from app.core.logging import get_logger
+
+                get_logger("slot_join_service").warning(
+                    "referral_tournament_progress_failed",
+                    user_id=str(current_user.id),
+                    error=str(exc),
+                )
+
         return tournament_team
