@@ -67,7 +67,7 @@ class SlotGeneratorService:
             return list(existing)
 
         created: list[Tournament] = []
-        for time_str in template.daily_slot_times:
+        for slot_index, time_str in enumerate(template.daily_slot_times, start=1):
             hour, minute = (int(p) for p in time_str.split(":")[:2])
             slug_time = f"{hour:02d}{minute:02d}"
             slug = f"{template.slug}-{date_iso}-{slug_time}"
@@ -80,11 +80,14 @@ class SlotGeneratorService:
             ).astimezone(timezone.utc)
 
             tournament = await self.tournament_repo.create(
-                # No time suffix -- e.g. "FREE FIRE - Squad", not
-                # "FREE FIRE - Squad - 10:00 IST". The slot's actual time
-                # lives in `starts_at`; the slug still encodes it for
-                # idempotent lookups.
-                title=template.title,
+                # Numbered by slot position within the day (#1, #2, #3...)
+                # so admins/players can tell same-day slots apart at a
+                # glance in lists/search, e.g. "FREE FIRE SOLO #1",
+                # "FREE FIRE SOLO #2" for 2pm/6pm slots of the same
+                # schedule. The number is tied to the slot's position in
+                # daily_slot_times, not a running total, so "#1" always
+                # means "today's first slot" -- stable and predictable.
+                title=f"{template.title.upper()} #{slot_index}",
                 slug=slug,
                 description=template.description,
                 rules=template.rules,
@@ -146,7 +149,7 @@ class SlotGeneratorService:
         tomorrow_slugs = {t.slug for t in tomorrows}
 
         created: list[Tournament] = []
-        for time_str in template.daily_slot_times:
+        for slot_index, time_str in enumerate(template.daily_slot_times, start=1):
             hour, minute = (int(p) for p in time_str.split(":")[:2])
             slug_time = f"{hour:02d}{minute:02d}"
             todays_slug = f"{template.slug}-{today.isoformat()}-{slug_time}"
@@ -171,8 +174,8 @@ class SlotGeneratorService:
             ).astimezone(timezone.utc)
 
             new_tournament = await self.tournament_repo.create(
-                # See generate_for_day -- no time suffix on the title.
-                title=template.title,
+                # Same #N-by-slot-position numbering as generate_for_day.
+                title=f"{template.title.upper()} #{slot_index}",
                 slug=tomorrow_slug,
                 description=template.description,
                 rules=template.rules,
