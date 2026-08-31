@@ -394,6 +394,13 @@ class ReferralService:
     async def list_pending_admin(self) -> list[Referral]:
         return list(await self.referral_repo.list_pending_admin())
 
+    async def list_history_for_user(self, user_id: UUID) -> list[Referral]:
+        """Full referral history for one user -- every referral where they
+        are the referrer or the referee. Used by the admin user-profile
+        screen so an admin can see who a user referred and who referred
+        them, resolved to real profiles rather than raw IDs."""
+        return list(await self.referral_repo.list_involving_user(user_id))
+
     async def admin_approve(self, *, admin: User, referral_id: UUID) -> Referral:
         if admin.role not in _ADMIN_ROLES:
             raise ForbiddenException("Only admins can approve referrals")

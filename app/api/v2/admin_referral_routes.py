@@ -84,6 +84,40 @@ async def list_pending_referrals(
     ]
 
 
+@router.get("/user/{user_id}/history", response_model=list[AdminReferralListItem])
+async def get_user_referral_history(
+    user_id: UUID,
+    current_user: User = Depends(require_admin),
+    session: AsyncSession = Depends(get_db_session),
+):
+    """Every referral involving this user, as referrer or referee --
+    newest first. Names/emails are resolved server-side so the admin
+    panel never has to show a raw user ID for the other party."""
+    service = ReferralService(session)
+    referrals = await service.list_history_for_user(user_id)
+    return [
+        AdminReferralListItem(
+            id=r.id,
+            referrer_id=r.referrer_id,
+            referrer_name=r.referrer.full_name if r.referrer else "—",
+            referrer_email=r.referrer.email if r.referrer else "—",
+            referee_id=r.referee_id,
+            referee_name=r.referee.full_name if r.referee else "—",
+            referee_email=r.referee.email if r.referee else "—",
+            status=r.status,
+            ip_address=r.ip_address,
+            device_id=r.device_id,
+            deposit_met=r.deposit_met,
+            tournament_met=r.tournament_met,
+            risk_flagged=r.risk_flagged,
+            risk_reason=r.risk_reason,
+            reward_amount=r.reward_amount,
+            created_at=r.created_at,
+        )
+        for r in referrals
+    ]
+
+
 @router.post("/{referral_id}/approve", response_model=ReferralStatusItem)
 async def approve_referral(
     referral_id: UUID,

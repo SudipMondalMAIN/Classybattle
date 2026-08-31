@@ -112,6 +112,21 @@ class ReferralRepository(BaseRepository[Referral]):
         result = await self.session.execute(stmt)
         return result.scalars().all()
 
+    async def list_involving_user(self, user_id: UUID) -> Sequence[Referral]:
+        """Every referral where the given user appears as either the
+        referrer or the referee -- i.e. that user's full referral
+        history, newest first. Used by the admin user-profile screen."""
+        from sqlalchemy import or_
+
+        stmt = (
+            select(Referral)
+            .where(or_(Referral.referrer_id == user_id, Referral.referee_id == user_id))
+            .options(selectinload(Referral.referrer), selectinload(Referral.referee))
+            .order_by(Referral.created_at.desc())
+        )
+        result = await self.session.execute(stmt)
+        return result.scalars().all()
+
 
 class ReferralMilestoneClaimRepository(BaseRepository[ReferralMilestoneClaim]):
     def __init__(self, session: AsyncSession) -> None:
