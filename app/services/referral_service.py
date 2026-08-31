@@ -35,9 +35,11 @@ from app.core.exceptions import (
 )
 from app.core.logging import get_logger
 from app.core.referral_code import generate_referral_code
+from app.models.notification import NotificationEventType
 from app.models.referral import Referral, ReferralConfig, ReferralStatus
 from app.models.tournament import Tournament
 from app.models.user import User, UserRole
+from app.notifications.dispatch_service import NotificationDispatchService
 from app.repositories.referral_repository import (
     ReferralConfigRepository,
     ReferralMilestoneClaimRepository,
@@ -354,6 +356,23 @@ class ReferralService:
             amount=str(config.reward_amount),
         )
 
+        # Reward gets credited to the wallet above, but nobody ever told
+        # the referrer -- this service never called the notification
+        # dispatcher anywhere, so a completed referral paid out silently.
+        try:
+            await NotificationDispatchService(self.session).dispatch(
+                user=referrer,
+                event_type=NotificationEventType.WALLET_CREDITED,
+                title="Referral reward credited \U0001f389",
+                body=f"₹{config.reward_amount} has been credited to your wallet for a successful referral.",
+                event_key=f"referral_reward:{referral.id}",
+                send_email=False,
+                meta_data={"referral_id": str(referral.id)},
+                commit=False,
+            )
+        except Exception:  # noqa: BLE001 - never block the reward itself
+            pass
+
         await self._check_milestones(referral.referrer_id, config)
 
     async def _check_milestones(self, referrer_id: UUID, config: ReferralConfig) -> None:
@@ -387,6 +406,20 @@ class ReferralService:
                 threshold=threshold,
                 bonus=str(bonus),
             )
+
+            try:
+                await NotificationDispatchService(self.session).dispatch(
+                    user=referrer,
+                    event_type=NotificationEventType.WALLET_CREDITED,
+                    title="Referral milestone bonus \U0001f389",
+                    body=f"₹{bonus} milestone bonus credited for reaching {threshold} referrals.",
+                    event_key=f"referral_milestone:{referrer_id}:{threshold}",
+                    send_email=False,
+                    meta_data={"threshold": threshold},
+                    commit=False,
+                )
+            except Exception:  # noqa: BLE001 - never block the reward itself
+                pass
 
     # ------------------------------------------------------------------
     # Admin: pending list + approve/reject

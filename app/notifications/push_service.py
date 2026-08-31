@@ -56,6 +56,8 @@ class PushNotificationService:
             return False
 
         try:
+            import asyncio
+
             from firebase_admin import messaging
 
             message = messaging.Message(
@@ -63,7 +65,17 @@ class PushNotificationService:
                 data=data or {},
                 token=fcm_token,
             )
-            messaging.send(message)
+            # messaging.send() is a SYNCHRONOUS, blocking network call (the
+            # Firebase Admin SDK has no native async client). Calling it
+            # directly here -- inside an `async def` but without offloading
+            # it -- blocks the single-threaded asyncio event loop for as
+            # long as the call to Firebase's servers takes. That freezes
+            # EVERY other in-flight request on this process (e.g. the
+            # /admin/players/{id}/pay response itself), which is why the
+            # admin panel's "Saving..." spinner could sit there long after
+            # the wallet credit had already committed to the DB. Running it
+            # in a worker thread keeps the event loop free.
+            await asyncio.to_thread(messaging.send, message)
             logger.info("push_sent", token=fcm_token[:12])
             return True
         except Exception as exc:  # noqa: BLE001
