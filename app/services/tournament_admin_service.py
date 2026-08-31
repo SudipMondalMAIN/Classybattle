@@ -13,9 +13,10 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.cache import cache_delete_prefix
 from app.core.exceptions import NotFoundException, ValidationException
 from app.models.notification import NotificationEventType
-from app.models.tournament import Tournament
+from app.models.tournament import Tournament, TournamentStatus
 from app.models.tournament_participant import TournamentParticipant
 from app.models.user import User
 from app.notifications.dispatch_service import NotificationDispatchService
@@ -255,6 +256,26 @@ class TournamentAdminService:
         )
         result = await result_service.verify_result(result.id, current_user)
         result = await result_service.approve_result(result.id, current_user)
+
+        # Publishing a result here is the *actual* "this tournament is
+        # done" signal on the admin page -- but until now it never
+        # touched Tournament.status. Status only flipped LIVE->COMPLETED
+        # via the 40-min auto-complete scheduler tick, so a tournament
+        # whose result was published *before* that tick stayed LIVE/
+        # SCHEDULED: it kept cluttering the "Tournaments" (ongoing) list
+        # and never showed up under Tournament Results (which filters
+        # on status=='completed'). Force it to COMPLETED here so both
+        # panels reflect reality immediately instead of waiting on the
+        # scheduler.
+        if tournament.status != TournamentStatus.COMPLETED:
+            await self.tournament_repo.update(
+                tournament,
+                status=TournamentStatus.COMPLETED,
+                auto_complete_at=None,
+            )
+            await self.session.commit()
+            await cache_delete_prefix("tournament:")
+
         return result
 
     async def pay_winner(
