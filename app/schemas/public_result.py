@@ -58,9 +58,17 @@ class PublicResultDetail(BaseModel):
     def build(cls, tournament, winners, participants) -> "PublicResultDetail":
         winner_entries = []
         for w in winners:
+            kills = None
+            winning_amount = None
             if w.participant is not None:
                 name = w.participant.user.full_name if getattr(w.participant, "user", None) else "Player"
                 uid = _extract_game_uid(getattr(w.participant, "game_profile", None))
+                # kills/winning_amount live on TournamentParticipant, not on
+                # TournamentWinner itself — pull them across so the winner
+                # card can show eliminations + reward, same as the
+                # participants list does.
+                kills = getattr(w.participant, "kills", None)
+                winning_amount = getattr(w.participant, "winning_amount", None)
             elif w.team is not None:
                 name = w.team.team_name
                 uid = None
@@ -70,8 +78,10 @@ class PublicResultDetail(BaseModel):
                 PublicPlayerEntry(
                     name=name,
                     game_uid=uid,
+                    kills=kills,
                     is_winner=True,
                     rank=w.rank,
+                    winning_amount=winning_amount,
                 )
             )
 
