@@ -39,6 +39,7 @@ from app.api.v1.tournament_result_routes import router as tournament_result_rout
 from app.api.v1.tournament_routes import router as tournament_router
 from app.api.v1.user_routes import router as user_router
 from app.api.v1.wallet_routes import router as wallet_router
+from app.api.v1.public_result_routes import router as public_result_router
 
 api_v1_router = APIRouter()
 api_v1_router.include_router(health_router)
@@ -77,3 +78,4 @@ api_v1_router.include_router(custom_match_claim_router)
 api_v1_router.include_router(support_chat_router)
 api_v1_router.include_router(support_chat_ws_router)
 api_v1_router.include_router(telegram_router)
+api_v1_router.include_router(public_result_router)
