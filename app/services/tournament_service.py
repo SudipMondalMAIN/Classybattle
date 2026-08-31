@@ -86,6 +86,11 @@ class TournamentService:
     def _is_admin(user: User) -> bool:
         return user.role in _MANAGER_ROLES
 
+    # Public alias so callers outside this service (e.g. route handlers
+    # deciding whether to fold admin-ness into a cache key) don't need to
+    # reach into a "private" method.
+    is_admin_user = _is_admin
+
     def _assert_can_manage(self, tournament: Tournament, user: User) -> None:
         if self._is_admin(user):
             return

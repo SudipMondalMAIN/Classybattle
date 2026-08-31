@@ -144,11 +144,20 @@ async def list_tournaments(
     search: Optional[str] = Query(None, max_length=200),
     sort_by: str = Query("starts_at"),
     sort_order: str = Query("asc", pattern="^(?i)(asc|desc)$"),
+    current_user: Optional[User] = Depends(get_current_user_optional),
     session: AsyncSession = Depends(get_db_session),
 ):
+    # Admin callers (e.g. the admin panel's Tournament Results page) must
+    # see PRIVATE tournaments too -- most notably user-hosted Custom
+    # Tournaments, which default to visibility=PRIVATE. Anonymous/regular
+    # users keep the previous public-only behaviour. The admin flag is
+    # folded into the cache key so a private-inclusive response is never
+    # served back to a non-admin caller (or vice versa).
+    is_admin_caller = current_user is not None and TournamentService.is_admin_user(current_user)
     cache_key = (
         f"{_CACHE_PREFIX}list:{page}:{page_size}:{game_id}:{status}:{visibility}:"
-        f"{is_featured}:{category}:{format}:{is_custom}:{search}:{sort_by}:{sort_order}"
+        f"{is_featured}:{category}:{format}:{is_custom}:{search}:{sort_by}:{sort_order}:"
+        f"admin={is_admin_caller}"
     )
     cached = await cache_get(cache_key)
     if cached is not None:
@@ -168,7 +177,7 @@ async def list_tournaments(
         search=search,
         sort_by=sort_by,
         sort_order=sort_order,
-        requesting_user=None,
+        requesting_user=current_user,
     )
     total_pages = math.ceil(total / page_size) if total else 0
     result = PaginatedTournaments(
