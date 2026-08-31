@@ -5,10 +5,14 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.cache import cache_delete, cache_get, cache_set
+from app.core.exceptions import NotFoundException
 from app.database.session import get_db_session
-from app.dependencies.auth import get_current_user
+from app.dependencies.auth import get_current_active_verified_user, get_current_user
 from app.models.user import User
+from app.schemas.leaderboard import MyTournamentStatsRead
 from app.schemas.user import UserProfileUpdate, UserRead
+from app.services.leaderboard_service import LeaderboardService
+from app.services.participant_service import ParticipantService
 from app.services.user_service import UserService
 
 router = APIRouter(prefix="/users", tags=["Users"])
@@ -38,6 +42,50 @@ async def get_my_profile(current_user: User = Depends(get_current_user)):
     result = UserRead.model_validate(current_user)
     await cache_set(cache_key, result.model_dump(mode="json"), ttl=_PROFILE_CACHE_TTL)
     return result
+
+
+@router.get("/me/stats", response_model=MyTournamentStatsRead)
+async def get_my_tournament_stats(
+    current_user: User = Depends(get_current_active_verified_user),
+    session: AsyncSession = Depends(get_db_session),
+):
+    """Profile-screen "Tournaments Joined / Won / Total Winnings / Win
+    Rate" summary.
+
+    `won` / `total_winnings` / `win_rate` come from PlayerStatistics
+    (LeaderboardService), which both the admin distribute-prizes flow
+    AND the custom 1v1 pay_winner flow keep up to date -- unlike
+    /prize-payouts/me, which only the admin flow ever populates, so it
+    under-reports wins for anyone who has only played custom
+    tournaments. `joined` still comes from the real registration count.
+    """
+    _, joined = await ParticipantService(session).registration_history(
+        current_user, page=1, page_size=1,
+    )
+
+    try:
+        stats = await LeaderboardService(session).get_player_statistics(current_user.id)
+        won = stats.tournaments_won
+        total_winnings = stats.prize_money_earned
+        # Tournament win rate (won/played), not PlayerStatistics.win_rate
+        # which is the per-match rate -- matches the old Flutter-side
+        # (won/joined)*100 calculation the profile card expects.
+        win_rate = (
+            round((stats.tournaments_won / stats.tournaments_played) * 100, 2)
+            if stats.tournaments_played
+            else None
+        )
+    except NotFoundException:
+        won = 0
+        total_winnings = 0
+        win_rate = None
+
+    return MyTournamentStatsRead(
+        joined=joined,
+        won=won,
+        total_winnings=total_winnings,
+        win_rate=win_rate,
+    )
 
 
 @router.patch("/me", response_model=UserRead)

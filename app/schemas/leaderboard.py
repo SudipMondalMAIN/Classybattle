@@ -20,6 +20,20 @@ class LeaderboardUserBrief(BaseModel):
     avatar_id: Optional[str] = None
 
 
+class MyTournamentStatsRead(BaseModel):
+    """Lightweight profile-screen summary: joined / won / total winnings /
+    win rate. Sourced from PlayerStatistics (all-time aggregate, kept in
+    sync by both the admin distribute-prizes flow and the custom 1v1
+    pay_winner flow) plus the user's real registration count, instead of
+    /prize-payouts/me which only the admin flow ever populates.
+    """
+
+    joined: int
+    won: int
+    total_winnings: Decimal
+    win_rate: Optional[float] = None
+
+
 class PlayerStatisticsRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
