@@ -72,10 +72,12 @@ class ScheduleCategory(str, enum.Enum):
     """Simplified per-game category for auto-generated daily tournament
     schedules: every Game can have any number of schedules per category —
     SOLO (classic/battle-royale, join alone), DUO (fixed 2-player team),
-    and SQUAD (Clash-Squad style, join as a fixed-size team, size
-    admin-configurable). No map/mode picking needed; Admin only
-    configures tournaments-per-day, per-tournament time, entry fee and
-    prize pool for each.
+    SQUAD (Clash-Squad style, join as a fixed-size team, size
+    admin-configurable), and FREE (zero-entry-fee, solo join -- same
+    registration mechanics as SOLO, distinct "Browse Tournaments"
+    filter/label/home-screen box). No map/mode picking needed; Admin
+    only configures tournaments-per-day, per-tournament time, entry fee
+    and prize pool for each.
 
     The CS_*/LW_*/BR_SURVIVE values below are additional named formats
     (Clash Squad 1v1/Headshot/4v4, Lone Wolf 1v1/Headshot, Battle Royale
@@ -88,6 +90,7 @@ class ScheduleCategory(str, enum.Enum):
     SOLO = "solo"
     DUO = "duo"
     SQUAD = "squad"
+    FREE = "free"
     CS_1V1 = "cs_1v1"
     CS_HEAD = "cs_head"
     CS_4V4 = "cs_4v4"
