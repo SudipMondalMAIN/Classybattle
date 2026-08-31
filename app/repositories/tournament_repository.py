@@ -200,7 +200,23 @@ class TournamentRepository(BaseRepository[Tournament]):
             # (mode_id/GameMode are unused here).
             fmt = format.strip().lower()
             if fmt == "solo":
+                # team_size == 1 alone also matches FREE/CS_*/LW_*/BR_SURVIVE
+                # schedules (they share team_size=1 with SOLO -- see
+                # ScheduleCategory docstring above). Those have their own
+                # dedicated category + Browse Tournaments box, so they must
+                # NOT leak into Solo. True Solo tournaments have
+                # category == SOLO, and user-hosted "Custom" solo
+                # tournaments (created via team-invite-less join, not tied
+                # to any admin schedule) have category IS NULL -- both of
+                # those belong in the Solo screen; every other named
+                # category does not.
                 conditions.append(Tournament.team_size == 1)
+                conditions.append(
+                    or_(
+                        Tournament.category.is_(None),
+                        Tournament.category == ScheduleCategory.SOLO,
+                    )
+                )
             elif fmt == "duo":
                 conditions.append(Tournament.team_size == 2)
             elif fmt == "squad":
