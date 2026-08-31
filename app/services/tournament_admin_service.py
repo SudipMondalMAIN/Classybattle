@@ -23,6 +23,7 @@ from app.repositories.game_repository import GameRepository, UserGameProfileRepo
 from app.repositories.tournament_participant_repository import TournamentParticipantRepository
 from app.repositories.tournament_repository import TournamentRepository
 from app.schemas.tournament_admin import MatchAdminDetailRead, MatchAdminPlayerRead, PlayerActionRead
+from app.services.tournament_result_service import TournamentResultService
 from app.services.wallet_service import WalletService
 
 _WALLET_WINNING_REF_TYPE = "tournament_winning_payout"
@@ -206,6 +207,55 @@ class TournamentAdminService:
             winning_amount=row.winning_amount,
             winning_paid_at=row.winning_paid_at,
         )
+
+    async def publish_result(self, tournament_id: UUID, current_user: User):
+        """
+        One-click bridge from this page's simple kills/is_winner/rank
+        declarations to the formal TournamentResult submit -> verify ->
+        approve pipeline (see TournamentResultService) that the public
+        result site / Export JPG actually reads from.
+
+        Without this, an admin could declare winners here forever and
+        Export JPG would still 404 with "No published result for this
+        tournament" -- the two systems never talk to each other on
+        their own. This builds result_data from whichever slots already
+        have a rank set (solo participant_id, or one row per winning
+        team) and drives the pipeline straight through in one call.
+        """
+        tournament, _game = await self._get_tournament_and_game(tournament_id)
+        slots = await self.slot_repo.list_for_tournament(tournament.id)
+
+        result_data: list[dict] = []
+        for slot in slots:
+            if slot.participant_id and slot.participant is not None:
+                if slot.rank is not None:
+                    result_data.append(
+                        {"participant_id": str(slot.participant_id), "placement": slot.rank}
+                    )
+            elif slot.tournament_team_id and slot.tournament_team is not None:
+                # Squad: rank/is_winner live per-member, but a whole team
+                # shares one rank -- take it from whichever member has one
+                # set (declare_result always writes the same rank to a
+                # team's members together) and emit a single row keyed by
+                # team_id, matching TournamentWinner's one-row-per-team shape.
+                team = slot.tournament_team
+                team_rank = next((m.rank for m in team.members if m.rank is not None), None)
+                if team_rank is not None:
+                    result_data.append({"team_id": str(team.id), "placement": team_rank})
+
+        if not result_data:
+            raise ValidationException(
+                "No winners have been declared yet -- set a rank for at least one "
+                "player/team on this tournament before publishing a result."
+            )
+
+        result_service = TournamentResultService(self.session)
+        result = await result_service.submit_result(
+            tournament_id, result_data=result_data, is_tie=False, current_user=current_user
+        )
+        result = await result_service.verify_result(result.id, current_user)
+        result = await result_service.approve_result(result.id, current_user)
+        return result
 
     async def pay_winner(
         self, tournament_id: UUID, user_id: UUID, *, amount: Decimal, note: Optional[str],

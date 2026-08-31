@@ -21,6 +21,7 @@ from app.schemas.tournament_admin import (
     PayWinnerRequest,
     PlayerActionRead,
 )
+from app.schemas.tournament_result import TournamentResultRead
 from app.services.tournament_admin_service import TournamentAdminService
 
 router = APIRouter(prefix="/tournaments/{tournament_id}/admin", tags=["Tournament Admin"])
@@ -52,6 +53,23 @@ async def declare_player_result(
         is_winner=payload.is_winner,
         rank=payload.rank,
     )
+
+
+@router.post("/publish-result", response_model=TournamentResultRead)
+async def publish_tournament_result(
+    tournament_id: UUID,
+    admin: User = Depends(require_admin),
+    session: AsyncSession = Depends(get_db_session),
+):
+    """
+    One-click bridge from this page's already-declared winners
+    (kills/is_winner/rank on each player) straight through the formal
+    submit -> verify -> approve pipeline, so the public result page /
+    Export JPG (which reads an APPROVED TournamentResult, not the
+    player rows this admin page edits) has something to show.
+    """
+    service = TournamentAdminService(session)
+    return await service.publish_result(tournament_id, current_user=admin)
 
 
 @router.post("/players/{user_id}/pay", response_model=PlayerActionRead)
