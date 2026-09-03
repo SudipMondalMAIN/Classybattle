@@ -122,6 +122,10 @@ class ScheduleCreate(BaseModel):
 
 
 class ScheduleUpdate(BaseModel):
+    rules: Optional[str] = Field(
+        None, max_length=5000,
+        description="Overrides the auto-generated rules text. Applied to every future generated slot.",
+    )
     entry_fee: Optional[Decimal] = Field(None, ge=0)
     prize_pool: Optional[Decimal] = Field(None, ge=0)
     max_players: Optional[int] = Field(None, gt=0, le=1000)
@@ -171,6 +175,7 @@ class ScheduleRead(BaseModel):
     id: UUID
     game_id: UUID
     category: ScheduleCategory
+    rules: Optional[str] = None
     squad_size: int
     entry_fee: Decimal
     prize_pool: Decimal

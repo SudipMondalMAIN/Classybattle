@@ -33,19 +33,26 @@ from app.utils.slug import slugify
 # schedule's category (Squad / Solo), so every generated slot under this
 # schedule inherits the correct rules with no manual per-schedule setup.
 _RULES_TEMPLATE = """1. GENERAL RULES
-\u2022 Eligibility: Players must use official Free Fire Max accounts (Level 35+).
+\u2022 Eligibility: Players must use official Free Fire Max accounts (Level 40+).
 \u2022 Profile Data: Game ID (UID) and In-Game Name (IGN) must match registration details.
 \u2022 Roster Lock: No player changes are allowed after registration closes.
 
 2. MATCH SETTINGS
 \u2022 Game Mode: {mode}.
-\u2022 Gun Skins: Gun attributes/extra powers will be turned ON.
+\u2022 Character Skills: Character skills will be turned ON.
+\u2022 Gun Attributes: Gun attributes/extra powers will be turned OFF.
 \u2022 Room Details: Room ID and Password will be shared 10 minutes before the match.
 
-3. FAIR PLAY & BANS
+3. BANNED CHARACTERS & WEAPONS
+\u2022 Banned Character: RYDEN is banned. Using this character will result in disqualification.
+\u2022 Banned Guns: Double Vector and M79 are banned. Using these weapons will result in disqualification.
+\u2022 Banned Vehicle: Horse (Mount) usage is banned during matches.
+
+4. FAIR PLAY & BANS
 \u2022 Zero Tolerance: Use of hacks, scripts, or glitches will result in a permanent ban.
 \u2022 No Teaming: Teaming up with enemies will lead to instant disqualification.
-\u2022 Technical Issues: No rematch for personal internet issues or device crashes."""
+\u2022 Technical Issues: No rematch for personal internet issues or device crashes.
+\u2022 Record room entry and gameplay."""
 
 
 def _build_rules(category: ScheduleCategory) -> str:
