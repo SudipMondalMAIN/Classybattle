@@ -9,11 +9,13 @@ import random
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config.settings import settings
+from app.core.email_validation import is_allowed_email_domain
 from app.core.exceptions import (
     ConflictException,
     InvalidCredentialsException,
     NotFoundException,
     UnauthorizedException,
+    ValidationException,
 )
 from app.core.logging import get_logger
 from app.core.player_uid import generate_player_uid
@@ -75,6 +77,17 @@ class AuthService:
         the user verifies their email. Returns the OTP (for internal
         use/testing); callers should not expose it to the client.
         """
+        if not is_allowed_email_domain(payload.email):
+            # Allowlist-only signup, enforced before any OTP is
+            # generated/sent -- this is the cheapest point to stop bulk
+            # bot signups that rely on disposable/obscure-domain inboxes
+            # to receive the OTP. See app/core/email_validation.py to
+            # extend the list of accepted providers.
+            raise ValidationException(
+                "Please sign up using a Gmail, Yahoo, Outlook, iCloud, Zoho, "
+                "or Proton email address."
+            )
+
         existing = await self.user_repo.exists_by_email_or_phone(payload.email, payload.phone_number)
 
         if existing is not None:
