@@ -93,6 +93,12 @@ class Settings(BaseSettings):
     # ---------------- CORS ----------------
     CORS_ORIGINS: List[str] = ["*"]
 
+    # ---------------- CAPTCHA (Cloudflare Turnstile) ----------------
+    # Verifies humans on /auth/signup and /auth/login. Leave secret key
+    # blank to disable captcha verification (e.g. local dev).
+    TURNSTILE_SECRET_KEY: str = ""
+    TURNSTILE_VERIFY_URL: str = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
+
     # ---------------- RATE LIMITING ----------------
     RATE_LIMIT_PER_MINUTE: int = 60
     AUTH_RATE_LIMIT: str = "10/minute"

@@ -16,6 +16,7 @@ class SignupRequest(BaseModel):
     email: EmailStr
     phone_number: str = Field(..., min_length=1, max_length=20)
     password: str = Field(..., min_length=1, max_length=128)
+    captcha_token: str | None = Field(default=None)
 
     @field_validator("phone_number")
     @classmethod
@@ -71,6 +72,7 @@ class VerifyLoginOTPRequest(BaseModel):
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str = Field(..., min_length=1)
+    captcha_token: str | None = Field(default=None)
 
 
 class TokenResponse(BaseModel):

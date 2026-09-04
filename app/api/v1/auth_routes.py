@@ -26,6 +26,7 @@ from app.schemas.auth import (
 from app.schemas.common import MessageResponse
 from app.schemas.user import UserRead
 from app.services.auth_service import AuthService
+from app.utils.captcha import verify_captcha
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -36,6 +37,7 @@ async def signup(
     request: Request, payload: SignupRequest, session: AsyncSession = Depends(get_db_session)
 ):
     """Step 1 of signup: validate details, create pending account, send OTP."""
+    await verify_captcha(payload.captcha_token, request.client.host if request.client else None)
     service = AuthService(session)
     await service.initiate_signup(payload)
     return SignupInitResponse(
@@ -77,6 +79,7 @@ async def resend_otp(
 async def login(
     request: Request, payload: LoginRequest, session: AsyncSession = Depends(get_db_session)
 ):
+    await verify_captcha(payload.captcha_token, request.client.host if request.client else None)
     service = AuthService(session)
     user, access_token, refresh_token = await service.login(payload)
     return TokenResponse(
