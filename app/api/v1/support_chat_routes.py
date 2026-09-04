@@ -8,7 +8,7 @@ clients that can't hold a socket open.
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_db_session
@@ -17,6 +17,7 @@ from app.models.support_chat import SupportChatClosedBy, SupportChatStatus
 from app.models.user import User
 from app.schemas.support_chat import (
     PaginatedSupportChatSessions,
+    SupportChatMessageRead,
     SupportChatSendMessageRequest,
     SupportChatSessionRead,
     SupportChatSessionWithMessages,
@@ -64,6 +65,28 @@ async def send_support_message(
         **SupportChatSessionRead.model_validate(chat_session).model_dump(),
         messages=messages,
     )
+
+
+@router.post("/support/session/{session_id}/media", response_model=SupportChatMessageRead, status_code=201)
+async def send_support_media(
+    session_id: UUID,
+    file: UploadFile = File(...),
+    caption: str = Form(""),
+    current_user: User = Depends(get_current_active_verified_user),
+    session: AsyncSession = Depends(get_db_session),
+):
+    """Upload an image or video attachment to Cloudinary and post it as a
+    message. Goes over REST (not the WebSocket) since binary uploads
+    don't fit the JSON socket protocol -- the resulting message is
+    still broadcast live to the socket the same way a text message is.
+    """
+    service = SupportChatService(session)
+    chat_session = await service.get_session_or_404(session_id)
+    file_bytes = await file.read()
+    message = await service.post_user_media_message(
+        current_user, chat_session, file_bytes, file.content_type or "application/octet-stream", caption
+    )
+    return SupportChatMessageRead.model_validate(message)
 
 
 @router.post("/support/session/{session_id}/end", response_model=SupportChatSessionRead)
@@ -128,6 +151,25 @@ async def admin_join_support_session(
     chat_session = await service.get_session_or_404(session_id)
     chat_session = await service.join_session(admin, chat_session)
     return SupportChatSessionRead.model_validate(chat_session)
+
+
+@router.post(
+    "/admin/support/sessions/{session_id}/media", response_model=SupportChatMessageRead, status_code=201
+)
+async def admin_send_support_media(
+    session_id: UUID,
+    file: UploadFile = File(...),
+    caption: str = Form(""),
+    admin: User = Depends(require_admin),
+    session: AsyncSession = Depends(get_db_session),
+):
+    service = SupportChatService(session)
+    chat_session = await service.get_session_or_404(session_id)
+    file_bytes = await file.read()
+    message = await service.post_agent_media_message(
+        admin, chat_session, file_bytes, file.content_type or "application/octet-stream", caption
+    )
+    return SupportChatMessageRead.model_validate(message)
 
 
 @router.post("/admin/support/sessions/{session_id}/end", response_model=SupportChatSessionRead)

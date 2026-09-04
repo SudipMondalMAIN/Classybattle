@@ -58,6 +58,16 @@ class Settings(BaseSettings):
     SUPABASE_KEY: str = ""
     SUPABASE_STORAGE_BUCKET: str = "classybattle-assets"
 
+    # ---------------- CLOUDINARY (support chat media) ----------------
+    # Support chat images/videos go to Cloudinary instead of Supabase so
+    # they can be auto-expired -- see scripts/cleanup_support_media.py,
+    # run on a daily cron, which deletes anything tagged "support_chat"
+    # older than SUPPORT_MEDIA_RETENTION_DAYS.
+    CLOUDINARY_CLOUD_NAME: str = ""
+    CLOUDINARY_API_KEY: str = ""
+    CLOUDINARY_API_SECRET: str = ""
+    SUPPORT_MEDIA_RETENTION_DAYS: int = 14
+
     # ---------------- BREVO ----------------
     BREVO_API_KEY: str = ""
     BREVO_SENDER_EMAIL: str = "noreply@classybattle.com"

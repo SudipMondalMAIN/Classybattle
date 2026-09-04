@@ -80,6 +80,8 @@ async def user_support_socket(websocket: WebSocket, token: str = Query(...)):
                             "id": str(m.id),
                             "sender_type": m.sender_type.value,
                             "content": m.content,
+                            "message_type": m.message_type.value,
+                            "media_url": m.media_url,
                             "created_at": m.created_at.isoformat(),
                         }
                         for m in history
@@ -165,6 +167,8 @@ async def agent_support_socket(websocket: WebSocket, session_id: UUID, token: st
                             "id": str(m.id),
                             "sender_type": m.sender_type.value,
                             "content": m.content,
+                            "message_type": m.message_type.value,
+                            "media_url": m.media_url,
                             "created_at": m.created_at.isoformat(),
                         }
                         for m in history

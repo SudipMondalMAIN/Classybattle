@@ -7,7 +7,12 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.support_chat import SupportChatMessage, SupportChatSession, SupportChatStatus
+from app.models.support_chat import (
+    SupportChatMessage,
+    SupportChatMessageType,
+    SupportChatSession,
+    SupportChatStatus,
+)
 from app.repositories.base import BaseRepository
 
 OPEN_STATUSES = (SupportChatStatus.WAITING, SupportChatStatus.ACTIVE)
@@ -58,10 +63,23 @@ class SupportChatRepository(BaseRepository[SupportChatSession]):
         return result.scalars().all(), total
 
     async def add_message(
-        self, session_id: UUID, sender_type, sender_id: Optional[UUID], content: str
+        self,
+        session_id: UUID,
+        sender_type,
+        sender_id: Optional[UUID],
+        content: str,
+        message_type: SupportChatMessageType = SupportChatMessageType.TEXT,
+        media_url: Optional[str] = None,
+        media_public_id: Optional[str] = None,
     ) -> SupportChatMessage:
         message = SupportChatMessage(
-            session_id=session_id, sender_type=sender_type, sender_id=sender_id, content=content
+            session_id=session_id,
+            sender_type=sender_type,
+            sender_id=sender_id,
+            content=content,
+            message_type=message_type,
+            media_url=media_url,
+            media_public_id=media_public_id,
         )
         self.session.add(message)
         await self.session.flush()

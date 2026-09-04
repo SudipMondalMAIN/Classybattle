@@ -7,7 +7,12 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.models.support_chat import SupportChatClosedBy, SupportChatSenderType, SupportChatStatus
+from app.models.support_chat import (
+    SupportChatClosedBy,
+    SupportChatMessageType,
+    SupportChatSenderType,
+    SupportChatStatus,
+)
 
 
 class SupportChatMessageRead(BaseModel):
@@ -18,6 +23,8 @@ class SupportChatMessageRead(BaseModel):
     sender_type: SupportChatSenderType
     sender_id: Optional[UUID] = None
     content: str
+    message_type: SupportChatMessageType = SupportChatMessageType.TEXT
+    media_url: Optional[str] = None
     created_at: datetime
 
 
