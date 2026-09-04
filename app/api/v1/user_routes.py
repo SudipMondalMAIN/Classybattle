@@ -60,7 +60,12 @@ async def get_my_tournament_stats(
     tournaments. `joined` still comes from the real registration count.
     """
     _, joined = await ParticipantService(session).registration_history(
-        current_user, page=1, page_size=1,
+        current_user,
+        page=1,
+        page_size=1,
+        status=None,
+        sort_by="created_at",
+        sort_order="desc",
     )
 
     try:

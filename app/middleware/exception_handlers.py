@@ -26,6 +26,7 @@ def register_exception_handlers(app: FastAPI) -> None:
                 "success": False,
                 "error_code": exc.error_code,
                 "message": exc.message,
+                "detail": exc.message,
                 "details": exc.details,
             },
         )
@@ -39,6 +40,7 @@ def register_exception_handlers(app: FastAPI) -> None:
                 "success": False,
                 "error_code": "VALIDATION_ERROR",
                 "message": "Request validation failed",
+                "detail": "Request validation failed",
                 "details": exc.errors(),
             },
         )
@@ -52,6 +54,7 @@ def register_exception_handlers(app: FastAPI) -> None:
                 "success": False,
                 "error_code": "INTERNAL_ERROR",
                 "message": "An unexpected error occurred",
+                "detail": "An unexpected error occurred",
                 "details": None,
             },
         )
