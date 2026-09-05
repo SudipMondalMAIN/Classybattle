@@ -54,6 +54,7 @@ class ParticipantListItem(BaseModel):
     short_id: int
     participant_uid: str
     tournament_id: UUID
+    tournament_title: Optional[str] = None
     user_id: UUID
     registration_type: RegistrationType
     team_name: Optional[str] = None
@@ -61,6 +62,17 @@ class ParticipantListItem(BaseModel):
     payment_status: ParticipantPaymentStatus
     joined_at: datetime
     checked_in_at: Optional[datetime] = None
+
+    @classmethod
+    def model_validate(cls, obj, *args, **kwargs):  # type: ignore[override]
+        # `tournament` is eagerly loaded (lazy="selectin") on Participant,
+        # so we can pull the title in without an extra query/join.
+        tournament = getattr(obj, "tournament", None)
+        if tournament is not None and not isinstance(obj, dict):
+            data = {c: getattr(obj, c) for c in cls.model_fields if c != "tournament_title"}
+            data["tournament_title"] = getattr(tournament, "title", None)
+            return super().model_validate(data, *args, **kwargs)
+        return super().model_validate(obj, *args, **kwargs)
 
 
 class ParticipantOrganizerView(ParticipantListItem):
