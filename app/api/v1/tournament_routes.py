@@ -66,6 +66,13 @@ _STATUS_ALIASES: dict[str, list[TournamentStatus]] = {
     "upcoming": [TournamentStatus.SCHEDULED],
     "ongoing": [TournamentStatus.LIVE],
     "past": [TournamentStatus.COMPLETED, TournamentStatus.CANCELLED],
+    # Combined "still joinable/live" filter -- lets a "Browse Tournaments"
+    # format page (e.g. cs_1v1) ask the server to exclude completed/
+    # cancelled history server-side, instead of fetching page 1 (sorted
+    # oldest-first) unfiltered and filtering client-side, which silently
+    # drops current/future slots once accumulated history exceeds one
+    # page (see cs_1v1 empty-page bug, Sept 2026).
+    "active": [TournamentStatus.SCHEDULED, TournamentStatus.LIVE],
 }
 
 
