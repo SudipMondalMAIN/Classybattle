@@ -67,7 +67,8 @@ class SlotGeneratorService:
             return list(existing)
 
         created: list[Tournament] = []
-        for slot_index, time_str in enumerate(template.daily_slot_times, start=1):
+        slot_number = template.last_slot_number
+        for time_str in template.daily_slot_times:
             hour, minute = (int(p) for p in time_str.split(":")[:2])
             slug_time = f"{hour:02d}{minute:02d}"
             slug = f"{template.slug}-{date_iso}-{slug_time}"
@@ -79,15 +80,13 @@ class SlotGeneratorService:
                 tzinfo=IST,
             ).astimezone(timezone.utc)
 
+            slot_number += 1
             tournament = await self.tournament_repo.create(
-                # Numbered by slot position within the day (#1, #2, #3...)
-                # so admins/players can tell same-day slots apart at a
-                # glance in lists/search, e.g. "FREE FIRE SOLO #1",
-                # "FREE FIRE SOLO #2" for 2pm/6pm slots of the same
-                # schedule. The number is tied to the slot's position in
-                # daily_slot_times, not a running total, so "#1" always
-                # means "today's first slot" -- stable and predictable.
-                title=f"{template.title.upper()} #{slot_index}",
+                # Numbered by a running counter kept on the template
+                # (last_slot_number), NOT by position-in-day -- so numbers
+                # never reset to #1 each day. E.g. 13 slots/day: day 1 =
+                # #1-#13, day 2 = #14-#26, day 3 = #27-#39, forever.
+                title=f"{template.title.upper()} #{slot_number}",
                 slug=slug,
                 description=template.description,
                 rules=template.rules,
@@ -120,6 +119,7 @@ class SlotGeneratorService:
             created.append(tournament)
 
         template.last_generated_on = datetime.now(timezone.utc)
+        template.last_slot_number = slot_number
         await self.session.commit()
         for tournament in created:
             await self.session.refresh(tournament)
@@ -149,7 +149,8 @@ class SlotGeneratorService:
         tomorrow_slugs = {t.slug for t in tomorrows}
 
         created: list[Tournament] = []
-        for slot_index, time_str in enumerate(template.daily_slot_times, start=1):
+        slot_number = template.last_slot_number
+        for time_str in template.daily_slot_times:
             hour, minute = (int(p) for p in time_str.split(":")[:2])
             slug_time = f"{hour:02d}{minute:02d}"
             todays_slug = f"{template.slug}-{today.isoformat()}-{slug_time}"
@@ -173,9 +174,12 @@ class SlotGeneratorService:
                 tzinfo=IST,
             ).astimezone(timezone.utc)
 
+            slot_number += 1
             new_tournament = await self.tournament_repo.create(
-                # Same #N-by-slot-position numbering as generate_for_day.
-                title=f"{template.title.upper()} #{slot_index}",
+                # Same running-counter numbering as generate_for_day --
+                # continues from wherever the template's count left off,
+                # never resets per day.
+                title=f"{template.title.upper()} #{slot_number}",
                 slug=tomorrow_slug,
                 description=template.description,
                 rules=template.rules,
@@ -210,6 +214,7 @@ class SlotGeneratorService:
 
         if created:
             template.last_generated_on = datetime.now(timezone.utc)
+            template.last_slot_number = slot_number
             await self.session.commit()
             for tournament in created:
                 await self.session.refresh(tournament)

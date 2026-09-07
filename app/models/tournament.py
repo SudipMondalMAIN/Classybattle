@@ -311,6 +311,18 @@ class Tournament(ShortIdMixin, BaseModel):
         comment="Last date slots were auto-generated for this schedule, to keep generation idempotent.",
     )
 
+    last_slot_number: Mapped[int] = mapped_column(
+        Integer,
+        default=0,
+        nullable=False,
+        comment=(
+            "Running counter for this schedule's generated slot titles "
+            "(Title #1, #2, ...). Keeps numbering continuous across days "
+            "instead of resetting to #1 every day -- e.g. 13 slots/day: "
+            "day 1 = #1-#13, day 2 = #14-#26, day 3 = #27-#39, forever."
+        ),
+    )
+
     # ------------------------------------------------------------------
     # Simplified schedule config (Raj's flow). A schedule is always
     # exactly one of SOLO or SQUAD per Game — no map/mode picking.

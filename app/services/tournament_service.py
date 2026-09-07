@@ -566,9 +566,76 @@ class TournamentService:
     async def auto_complete_due_tournaments(self) -> int:
         """Scheduler tick: flips every LIVE tournament whose
         auto_complete_at has passed to COMPLETED. Returns the count
-        completed."""
+        completed.
+
+        Also folds each tournament into PlayerStatistics
+        (tournaments_played/tournaments_won) via
+        LeaderboardService.record_tournament_completion -- this was
+        previously never called anywhere, so the Profile screen's
+        "Tournaments Won" / "Win Rate" stats stayed stuck at 0/-- even
+        for users who had actually won and been paid (Total Winnings
+        and Joined come from separate, working sources).
+        """
+        from sqlalchemy import select
+
+        from app.models.participant import Participant
+        from app.models.tournament_participant import TournamentParticipant
+        from app.models.tournament_team import TournamentTeamMember
+        from app.services.leaderboard_service import LeaderboardService
+
         due = await self.repo.list_live_past_auto_complete()
+        leaderboard_service = LeaderboardService(self.session)
         for tournament in due:
+            participant_rows = await self.session.execute(
+                select(Participant.user_id).where(
+                    Participant.tournament_id == tournament.id,
+                    Participant.deleted_at.is_(None),
+                )
+            )
+            participant_user_ids = [row[0] for row in participant_rows.all()]
+
+            # Winners: solo/duo/squad slots (is_winner on the
+            # per-tournament participant row) joined back to the real
+            # user via Participant.user_id.
+            winner_rows = await self.session.execute(
+                select(Participant.user_id)
+                .join(
+                    TournamentParticipant,
+                    TournamentParticipant.participant_id == Participant.id,
+                )
+                .where(
+                    TournamentParticipant.tournament_id == tournament.id,
+                    TournamentParticipant.is_winner.is_(True),
+                )
+            )
+            winner_user_ids = [row[0] for row in winner_rows.all()]
+
+            # Team-based wins: winning TournamentTeamMember rows for this
+            # tournament's team slots credit every member, not just the
+            # captain.
+            team_winner_rows = await self.session.execute(
+                select(TournamentTeamMember.user_id)
+                .join(
+                    TournamentParticipant,
+                    TournamentParticipant.tournament_team_id == TournamentTeamMember.tournament_team_id,
+                )
+                .where(
+                    TournamentParticipant.tournament_id == tournament.id,
+                    TournamentParticipant.is_winner.is_(True),
+                )
+            )
+            winner_user_ids.extend(row[0] for row in team_winner_rows.all())
+
+            if participant_user_ids:
+                try:
+                    await leaderboard_service.record_tournament_completion(
+                        tournament_id=tournament.id,
+                        participant_user_ids=participant_user_ids,
+                        winner_user_ids=winner_user_ids,
+                    )
+                except Exception:  # noqa: BLE001 - stats must never block auto-complete
+                    pass
+
             await self.repo.update(tournament, status=TournamentStatus.COMPLETED)
         if due:
             await self.session.commit()
