@@ -100,6 +100,8 @@ class AuthService:
             "full_name": payload.full_name,
             "phone_number": payload.phone_number,
             "hashed_password": hash_password(payload.password),
+            "referral_code": payload.referral_code.strip().upper() if payload.referral_code else None,
+            "device_id": payload.device_id,
         }
 
         otp_code = await self.otp_service.generate_and_store_otp(
@@ -159,6 +161,29 @@ class AuthService:
         await PlayerStatisticsRepository(self.session).get_or_create(user.id)
 
         await self.session.commit()
+
+        # Optional: user entered a referral code at signup instead of on
+        # the separate Refer & Earn screen. Same ReferralService.apply_code
+        # flow/rules -- best-effort so a stale/invalid/expired code (or any
+        # referral-side error) never blocks account creation; the user can
+        # still apply a code later from Refer & Earn if this is skipped.
+        referral_code = signup_payload.get("referral_code")
+        if referral_code:
+            try:
+                from app.services.referral_service import ReferralService
+
+                await ReferralService(self.session).apply_code(
+                    referee=user,
+                    code=referral_code,
+                    ip_address=get_client_ip(),
+                    device_id=signup_payload.get("device_id"),
+                )
+            except Exception as exc:  # noqa: BLE001 - referral must never break signup
+                logger.warning(
+                    "signup_referral_apply_failed",
+                    user_id=str(user.id),
+                    error=str(exc),
+                )
 
         access_token, refresh_token = await self._issue_tokens(user)
         await self.session.commit()

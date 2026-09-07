@@ -17,6 +17,13 @@ class SignupRequest(BaseModel):
     phone_number: str = Field(..., min_length=1, max_length=20)
     password: str = Field(..., min_length=1, max_length=128)
     captcha_token: str | None = Field(default=None)
+    # Optional: lets a user apply a referral code right at signup instead
+    # of needing to visit the separate "Refer & Earn" screen afterwards.
+    # Applied via ReferralService.apply_code once the account is created
+    # (see AuthService.verify_signup_otp) -- same rules/window apply, this
+    # is just a second entry point into the same flow.
+    referral_code: str | None = Field(default=None, min_length=1, max_length=16)
+    device_id: str | None = Field(default=None, max_length=255)
 
     @field_validator("phone_number")
     @classmethod
