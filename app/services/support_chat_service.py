@@ -76,6 +76,38 @@ class SupportChatService:
         await self.session.refresh(chat_session)
         return chat_session
 
+    async def start_session_with_user(self, agent: User, target_user_id: UUID) -> SupportChatSession:
+        """Admin-initiated chat -- lets an agent message a user who hasn't
+        opened a support chat themselves. Reuses the user's already-open
+        session if one exists (joining it), otherwise creates a fresh
+        session straight into ACTIVE with this agent attached."""
+        existing = await self.repo.get_open_session_for_user(target_user_id)
+        if existing is not None:
+            chat_session = existing
+            if chat_session.status == SupportChatStatus.WAITING:
+                return await self.join_session(agent, chat_session)
+            if chat_session.agent_id != agent.id:
+                raise ForbiddenException("Another agent is already handling this chat")
+            return chat_session
+
+        chat_session = await self.repo.create(
+            user_id=target_user_id, status=SupportChatStatus.ACTIVE, agent_id=agent.id
+        )
+        await self.session.commit()
+        await self.session.refresh(chat_session)
+
+        open_notice = await self.repo.add_message(
+            chat_session.id,
+            SupportChatSenderType.SYSTEM,
+            None,
+            f"{agent.full_name or 'An agent'} started this chat",
+        )
+        await self.session.commit()
+
+        await manager.broadcast_to_session(chat_session.id, _message_payload(open_notice))
+        await manager.broadcast_to_lobby(_session_summary(chat_session))
+        return chat_session
+
     async def get_session_or_404(self, session_id: UUID) -> SupportChatSession:
         chat_session = await self.repo.get_by_id(session_id)
         if chat_session is None:

@@ -55,3 +55,7 @@ class PaginatedSupportChatSessions(BaseModel):
 
 class SupportChatSendMessageRequest(BaseModel):
     content: str = Field(min_length=1, max_length=2000)
+
+
+class SupportChatStartSessionRequest(BaseModel):
+    user_id: UUID

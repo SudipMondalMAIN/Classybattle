@@ -21,6 +21,7 @@ from app.schemas.support_chat import (
     SupportChatSendMessageRequest,
     SupportChatSessionRead,
     SupportChatSessionWithMessages,
+    SupportChatStartSessionRequest,
 )
 from app.services.support_chat_service import SupportChatService
 
@@ -121,6 +122,19 @@ async def admin_list_support_sessions(
         page_size=page_size,
         total_pages=total_pages,
     )
+
+
+@router.post("/admin/support/sessions/start", response_model=SupportChatSessionRead)
+async def admin_start_support_session(
+    payload: SupportChatStartSessionRequest,
+    admin: User = Depends(require_admin),
+    session: AsyncSession = Depends(get_db_session),
+):
+    """Lets an agent open (or join) a chat with a user directly from
+    their profile, without waiting for the user to message first."""
+    service = SupportChatService(session)
+    chat_session = await service.start_session_with_user(admin, payload.user_id)
+    return SupportChatSessionRead.model_validate(chat_session)
 
 
 @router.get("/admin/support/sessions/{session_id}", response_model=SupportChatSessionWithMessages)
