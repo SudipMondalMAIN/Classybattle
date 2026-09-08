@@ -6,6 +6,7 @@ from typing import Optional, Union
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Query, UploadFile
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.cache import cache_delete_prefix, cache_get, cache_set
@@ -17,6 +18,7 @@ from app.dependencies.auth import (
     require_admin,
 )
 from app.models.tournament import ScheduleCategory, TournamentStatus, TournamentVisibility
+from app.models.tournament_result import TournamentResult, TournamentResultStatus
 from app.models.user import User
 from app.schemas.common import MessageResponse
 from app.schemas.tournament import (
@@ -187,8 +189,27 @@ async def list_tournaments(
         requesting_user=current_user,
     )
     total_pages = math.ceil(total / page_size) if total else 0
+    list_items = [TournamentListItem.model_validate(t) for t in items]
+
+    # Batch-attach payout status ("PAID" stamp) -- one extra query for
+    # the whole page instead of N+1, and skipped entirely when the page
+    # has no tournaments.
+    if list_items:
+        payout_rows = (
+            await session.execute(
+                select(TournamentResult.tournament_id, TournamentResult.prize_distribution_triggered)
+                .where(
+                    TournamentResult.tournament_id.in_([li.id for li in list_items]),
+                    TournamentResult.status == TournamentResultStatus.APPROVED,
+                )
+            )
+        ).all()
+        payout_by_tournament = {row[0]: row[1] for row in payout_rows}
+        for li in list_items:
+            li.payout_paid = payout_by_tournament.get(li.id)
+
     result = PaginatedTournaments(
-        items=[TournamentListItem.model_validate(t) for t in items],
+        items=list_items,
         total=total,
         page=page,
         page_size=page_size,

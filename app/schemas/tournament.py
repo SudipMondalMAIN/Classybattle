@@ -279,6 +279,11 @@ class TournamentListItem(BaseModel):
     registration_mode: TeamRegistrationMode
     team_size: int
     starts_at: Optional[datetime] = None
+    # True once this tournament's result has been approved AND the
+    # automatic prize payout has actually run (TournamentResult.
+    # prize_distribution_triggered) -- lets list/browse screens show a
+    # "PAID" stamp. None means no approved result yet (nothing to pay).
+    payout_paid: Optional[bool] = None
 
 
 class PaginatedTournaments(BaseModel):
