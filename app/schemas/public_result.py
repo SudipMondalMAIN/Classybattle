@@ -51,6 +51,7 @@ class PublicResultDetail(BaseModel):
     title: str
     starts_at: datetime
     prize_pool: Decimal
+    prize_type: str = "rank"
     winners: list[PublicPlayerEntry]
     participants: list[PublicPlayerEntry]
 
@@ -112,6 +113,7 @@ class PublicResultDetail(BaseModel):
             title=tournament.title,
             starts_at=tournament.starts_at,
             prize_pool=tournament.prize_pool,
+            prize_type=getattr(getattr(tournament, "prize_type", None), "value", None) or "rank",
             winners=winner_entries,
             participants=participant_entries,
         )
