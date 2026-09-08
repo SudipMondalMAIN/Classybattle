@@ -219,35 +219,95 @@ class TournamentAdminService:
         Without this, an admin could declare winners here forever and
         Export JPG would still 404 with "No published result for this
         tournament" -- the two systems never talk to each other on
-        their own. This builds result_data from whichever slots already
-        have a rank set (solo participant_id, or one row per winning
-        team) and drives the pipeline straight through in one call.
+        their own.
+
+        Which rows qualify depends on the tournament's own prize_type,
+        so admins are never forced to fill in a field their prize type
+        doesn't use:
+          RANK      -> rows with a rank set.
+          WIN       -> rows ticked "Winner?" (rank not required).
+          PER_KILL  -> rows with kills > 0 (no winner/rank required).
         """
         tournament, _game = await self._get_tournament_and_game(tournament_id)
         slots = await self.slot_repo.list_for_tournament(tournament.id)
 
         result_data: list[dict] = []
-        for slot in slots:
-            if slot.participant_id and slot.participant is not None:
-                if slot.rank is not None:
-                    result_data.append(
-                        {"participant_id": str(slot.participant_id), "placement": slot.rank}
-                    )
-            elif slot.tournament_team_id and slot.tournament_team is not None:
-                # Squad: rank/is_winner live per-member, but a whole team
-                # shares one rank -- take it from whichever member has one
-                # set (declare_result always writes the same rank to a
-                # team's members together) and emit a single row keyed by
-                # team_id, matching TournamentWinner's one-row-per-team shape.
-                team = slot.tournament_team
-                team_rank = next((m.rank for m in team.members if m.rank is not None), None)
-                if team_rank is not None:
-                    result_data.append({"team_id": str(team.id), "placement": team_rank})
 
-        if not result_data:
+        def _team_rank(team) -> Optional[int]:
+            return next((m.rank for m in team.members if m.rank is not None), None)
+
+        def _team_is_winner(team) -> bool:
+            return any(m.is_winner for m in team.members)
+
+        def _team_kills(team) -> int:
+            return sum((m.kills or 0) for m in team.members)
+
+        if tournament.prize_type == PrizeType.RANK:
+            # Rank-based: only rows an admin actually assigned a rank to.
+            for slot in slots:
+                if slot.participant_id and slot.participant is not None:
+                    if slot.rank is not None:
+                        result_data.append(
+                            {"participant_id": str(slot.participant_id), "placement": slot.rank}
+                        )
+                elif slot.tournament_team_id and slot.tournament_team is not None:
+                    team = slot.tournament_team
+                    team_rank = _team_rank(team)
+                    if team_rank is not None:
+                        result_data.append({"team_id": str(team.id), "placement": team_rank})
+            if not result_data:
+                raise ValidationException(
+                    "No winners have been declared yet -- set a rank for at least one "
+                    "player/team on this tournament before publishing a result."
+                )
+
+        elif tournament.prize_type == PrizeType.WIN:
+            # Flat win payout: whoever is ticked "Winner?" -- no rank required.
+            # They all share placement 1 since there's no ordering between them.
+            for slot in slots:
+                if slot.participant_id and slot.participant is not None:
+                    if slot.is_winner:
+                        result_data.append(
+                            {"participant_id": str(slot.participant_id), "placement": slot.rank or 1}
+                        )
+                elif slot.tournament_team_id and slot.tournament_team is not None:
+                    team = slot.tournament_team
+                    if _team_is_winner(team):
+                        result_data.append(
+                            {"team_id": str(team.id), "placement": _team_rank(team) or 1}
+                        )
+            if not result_data:
+                raise ValidationException(
+                    "No winners have been marked yet -- tick \"Winner?\" for at least one "
+                    "player/team on this tournament before publishing a result."
+                )
+
+        elif tournament.prize_type == PrizeType.PER_KILL:
+            # Per-kill payout: every row with kills > 0 gets paid regardless
+            # of winner/rank. Rank them by kills for the record only.
+            rows: list[tuple] = []
+            for slot in slots:
+                if slot.participant_id and slot.participant is not None:
+                    if (slot.kills or 0) > 0:
+                        rows.append(("participant_id", str(slot.participant_id), slot.kills or 0, slot.rank))
+                elif slot.tournament_team_id and slot.tournament_team is not None:
+                    team = slot.tournament_team
+                    kills = _team_kills(team)
+                    if kills > 0:
+                        rows.append(("team_id", str(team.id), kills, _team_rank(team)))
+            rows.sort(key=lambda r: r[2], reverse=True)
+            for placement, (key, ident, _kills, existing_rank) in enumerate(rows, start=1):
+                result_data.append({key: ident, "placement": existing_rank or placement})
+            if not result_data:
+                raise ValidationException(
+                    "No kills have been recorded yet -- enter kills for at least one "
+                    "player/team on this tournament before publishing a result."
+                )
+
+        else:
             raise ValidationException(
-                "No winners have been declared yet -- set a rank for at least one "
-                "player/team on this tournament before publishing a result."
+                "This tournament has no valid prize type configured -- set one before "
+                "publishing a result."
             )
 
         result_service = TournamentResultService(self.session)
