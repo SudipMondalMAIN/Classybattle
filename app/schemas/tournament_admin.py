@@ -51,6 +51,17 @@ class DeclareResultRequest(BaseModel):
     rank: Optional[int] = None
 
 
+class BulkResultItem(BaseModel):
+    user_id: UUID
+    kills: Optional[int] = None
+    is_winner: Optional[bool] = None
+    rank: Optional[int] = None
+
+
+class BulkDeclareResultRequest(BaseModel):
+    results: list[BulkResultItem]
+
+
 class PayWinnerRequest(BaseModel):
     amount: Decimal
     note: Optional[str] = None
@@ -63,3 +74,7 @@ class PlayerActionRead(BaseModel):
     rank: Optional[int] = None
     winning_amount: Optional[Decimal] = None
     winning_paid_at: Optional[datetime] = None
+
+
+class BulkDeclareResultResponse(BaseModel):
+    results: list[PlayerActionRead]

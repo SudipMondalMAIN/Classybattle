@@ -115,10 +115,13 @@ class TournamentAdminService:
             players=players,
         )
 
-    async def _find_player_slot(self, tournament_id: UUID, user_id: UUID):
+    async def _find_player_slot(self, tournament_id: UUID, user_id: UUID, slots=None):
         """Returns ('solo', TournamentParticipant) or ('squad', TournamentTeamMember)
-        for this user in this tournament, or raises NotFoundException."""
-        slots = await self.slot_repo.list_for_tournament(tournament_id)
+        for this user in this tournament, or raises NotFoundException.
+        Pass a preloaded `slots` list (see declare_results_bulk) to skip
+        re-querying every player's join rows from scratch."""
+        if slots is None:
+            slots = await self.slot_repo.list_for_tournament(tournament_id)
         for slot in slots:
             if slot.participant_id and slot.participant is not None and slot.participant.user_id == user_id:
                 return "solo", slot
@@ -137,8 +140,9 @@ class TournamentAdminService:
         is_winner: Optional[bool],
         rank: Optional[int] = None,
         commit: bool = True,
+        _slots=None,
     ):
-        kind, row = await self._find_player_slot(tournament_id, user_id)
+        kind, row = await self._find_player_slot(tournament_id, user_id, slots=_slots)
         update_data = {}
         if kills is not None:
             update_data["kills"] = kills
@@ -208,6 +212,31 @@ class TournamentAdminService:
             winning_amount=row.winning_amount,
             winning_paid_at=row.winning_paid_at,
         )
+
+    async def declare_results_bulk(
+        self, tournament_id: UUID, items: list
+    ) -> list["PlayerActionRead"]:
+        """Declares every player's result in one shot instead of the
+        caller (the admin panel) firing one HTTP request per player.
+        Loads the tournament's join rows (participants/team members)
+        exactly once and reuses that in-memory list for every item,
+        instead of declare_result's usual one-query-per-player lookup,
+        then commits once at the end instead of once per player."""
+        slots = await self.slot_repo.list_for_tournament(tournament_id)
+        results: list[PlayerActionRead] = []
+        for item in items:
+            result = await self.declare_result(
+                tournament_id,
+                item.user_id,
+                kills=item.kills,
+                is_winner=item.is_winner,
+                rank=item.rank,
+                commit=False,
+                _slots=slots,
+            )
+            results.append(result)
+        await self.session.commit()
+        return results
 
     async def publish_result(self, tournament_id: UUID, current_user: User):
         """

@@ -16,6 +16,8 @@ from app.database.session import get_db_session
 from app.dependencies.auth import require_admin
 from app.models.user import User
 from app.schemas.tournament_admin import (
+    BulkDeclareResultRequest,
+    BulkDeclareResultResponse,
     DeclareResultRequest,
     MatchAdminDetailRead,
     PayWinnerRequest,
@@ -53,6 +55,21 @@ async def declare_player_result(
         is_winner=payload.is_winner,
         rank=payload.rank,
     )
+
+
+@router.post("/results/bulk", response_model=BulkDeclareResultResponse)
+async def declare_player_results_bulk(
+    tournament_id: UUID,
+    payload: BulkDeclareResultRequest,
+    _admin: User = Depends(require_admin),
+    session: AsyncSession = Depends(get_db_session),
+):
+    """Declares every player's kills/rank/is_winner in a single request
+    instead of one call per player -- the whole tournament's result
+    table, submitted and committed once."""
+    service = TournamentAdminService(session)
+    results = await service.declare_results_bulk(tournament_id, payload.results)
+    return BulkDeclareResultResponse(results=results)
 
 
 @router.post("/publish-result", response_model=TournamentResultRead)
