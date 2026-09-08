@@ -72,6 +72,23 @@ async def publish_tournament_result(
     return await service.publish_result(tournament_id, current_user=admin)
 
 
+@router.post("/auto-pay")
+async def auto_pay_tournament_winners(
+    tournament_id: UUID,
+    admin: User = Depends(require_admin),
+    session: AsyncSession = Depends(get_db_session),
+):
+    """
+    Re-runs the automatic prize_type-driven payout (RANK / PER_KILL / WIN)
+    for this tournament. publish-result already calls this once on its
+    own, so this exists only as a manual safety-net re-trigger (e.g. if
+    a wallet credit failed and needs retrying) — already-paid players are
+    always skipped, so calling this again never double-pays anyone.
+    """
+    service = TournamentAdminService(session)
+    return await service.auto_pay_all(tournament_id, admin)
+
+
 @router.post("/players/{user_id}/pay", response_model=PlayerActionRead)
 async def pay_tournament_winner(
     tournament_id: UUID,

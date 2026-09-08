@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.cache import cache_delete_prefix
 from app.core.exceptions import NotFoundException, ValidationException
 from app.models.notification import NotificationEventType
-from app.models.tournament import Tournament, TournamentStatus
+from app.models.tournament import PrizeType, Tournament, TournamentStatus
 from app.models.tournament_participant import TournamentParticipant
 from app.models.user import User
 from app.notifications.dispatch_service import NotificationDispatchService
@@ -276,12 +276,28 @@ class TournamentAdminService:
             await self.session.commit()
             await cache_delete_prefix("tournament:")
 
+        # Automatic payout — this is the whole point of "one-click
+        # publish": the ₹ amounts are already configured on the
+        # tournament (rank_prize_rules / per_kill_amount / win_amount),
+        # so the moment the admin confirms results here, every eligible
+        # player/team gets credited straight away. No separate manual
+        # "enter amount and pay" step needed. Safe to re-run (already
+        # paid rows are skipped), so a retried publish never double-pays.
+        try:
+            await self.auto_pay_all(tournament_id, current_user, commit=True)
+        except Exception:  # noqa: BLE001 - a payout hiccup must never hide the published result
+            pass
+
         return result
 
     async def pay_winner(
         self, tournament_id: UUID, user_id: UUID, *, amount: Decimal, note: Optional[str],
         current_user: User, commit: bool = True,
     ):
+        """Manual/override payout — admin types the amount themselves.
+        For the normal flow, prefer publish_result(), which pays everyone
+        automatically from the tournament's configured prize_type instead
+        of requiring this per-player manual entry."""
         kind, row = await self._find_player_slot(tournament_id, user_id)
         if not row.is_winner:
             raise ValidationException(
@@ -296,6 +312,25 @@ class TournamentAdminService:
         if user is None:
             raise NotFoundException("User not found")
 
+        return await self._credit_player(
+            tournament_id=tournament_id,
+            user=user,
+            kind=kind,
+            row=row,
+            amount=amount,
+            note=note,
+            commit=commit,
+        )
+
+    # ------------------------------------------------------------------
+    # Shared settlement primitive — used by both the manual pay_winner()
+    # override above and the automatic prize_type-driven payout below.
+    # ------------------------------------------------------------------
+    async def _credit_player(
+        self, *, tournament_id: UUID, user: User, kind: str, row, amount: Decimal,
+        note: Optional[str], commit: bool,
+    ) -> PlayerActionRead:
+        user_id = user.id
         await self.wallet_service.credit(
             user,
             amount=amount,
@@ -357,7 +392,7 @@ class TournamentAdminService:
                 send_email=False,
                 meta_data={"tournament_id": str(tournament_id)},
                 # Same reasoning as in declare_result() above — must match
-                # pay_winner's own commit flag or its internal commit
+                # the caller's own commit flag or this internal commit
                 # releases the caller's still-held row lock early.
                 commit=commit,
             )
@@ -372,3 +407,81 @@ class TournamentAdminService:
             winning_amount=row.winning_amount,
             winning_paid_at=row.winning_paid_at,
         )
+
+    def _auto_amount_for_row(self, tournament: Tournament, row) -> Decimal:
+        """Computes the payout for one player/team row purely from the
+        tournament's own configured prize_type -- no admin-entered amount
+        needed, since the ₹ rules were already set up front:
+
+        RANK      -> rank_prize_rules[{'rank': n, 'amount': x}, ...] matched
+                     against this row's rank.
+        PER_KILL  -> kills * per_kill_amount, for every row with kills > 0
+                     (a per-kill payout doesn't require is_winner).
+        WIN       -> a flat win_amount, only for rows marked is_winner.
+        """
+        if tournament.prize_type == PrizeType.RANK:
+            if row.rank is None or not tournament.rank_prize_rules:
+                return Decimal("0")
+            for rule in tournament.rank_prize_rules:
+                if int(rule.get("rank", -1)) == row.rank:
+                    return Decimal(str(rule.get("amount", 0)))
+            return Decimal("0")
+
+        if tournament.prize_type == PrizeType.PER_KILL:
+            kills = row.kills or 0
+            if kills <= 0 or not tournament.per_kill_amount:
+                return Decimal("0")
+            return Decimal(str(tournament.per_kill_amount)) * Decimal(kills)
+
+        if tournament.prize_type == PrizeType.WIN:
+            if not row.is_winner or not tournament.win_amount:
+                return Decimal("0")
+            return Decimal(str(tournament.win_amount))
+
+        return Decimal("0")
+
+    async def auto_pay_all(self, tournament_id: UUID, current_user: User, commit: bool = True):
+        """Pays every eligible player/team member automatically, using
+        only the tournament's pre-configured prize_type rules -- no
+        amount is ever typed in by the admin. Rows with ₹0 computed
+        amount or that are already paid are silently skipped, so this is
+        safe to call repeatedly (e.g. if publish_result is retried)."""
+        tournament, _game = await self._get_tournament_and_game(tournament_id)
+        slots = await self.slot_repo.list_for_tournament(tournament.id)
+
+        from app.repositories.user_repository import UserRepository
+
+        user_repo = UserRepository(self.session)
+        paid: list[PlayerActionRead] = []
+        skipped: list[dict] = []
+
+        async def _maybe_pay(kind: str, row, user_id: UUID):
+            if row.winning_paid_at is not None:
+                return
+            amount = self._auto_amount_for_row(tournament, row)
+            if amount <= 0:
+                skipped.append({"user_id": str(user_id), "reason": "no amount due"})
+                return
+            user = await user_repo.get_by_id(user_id)
+            if user is None:
+                skipped.append({"user_id": str(user_id), "reason": "user not found"})
+                return
+            result = await self._credit_player(
+                tournament_id=tournament_id,
+                user=user,
+                kind=kind,
+                row=row,
+                amount=amount,
+                note=f"Automatic {tournament.prize_type.value} payout for {tournament.title}",
+                commit=commit,
+            )
+            paid.append(result)
+
+        for slot in slots:
+            if slot.participant_id and slot.participant is not None:
+                await _maybe_pay("solo", slot, slot.participant.user_id)
+            elif slot.tournament_team_id and slot.tournament_team is not None:
+                for member in slot.tournament_team.members:
+                    await _maybe_pay("squad", member, member.user_id)
+
+        return {"paid": paid, "skipped": skipped}
