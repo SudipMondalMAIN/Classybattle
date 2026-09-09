@@ -174,6 +174,7 @@ class PaymentService:
             "max_deposit_amount": settings_row.max_deposit_amount,
             "min_withdrawal_amount": settings_row.min_withdrawal_amount,
             "max_withdrawal_amount": settings_row.max_withdrawal_amount,
+            "min_lifetime_deposit_for_withdrawal": settings_row.min_lifetime_deposit_for_withdrawal,
         }
 
         update_fields = {k: v for k, v in payload.items() if v is not None}

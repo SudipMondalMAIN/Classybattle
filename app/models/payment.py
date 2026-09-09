@@ -99,6 +99,16 @@ class PaymentSettings(Base):
         Numeric(14, 2), default=100000, server_default="100000", nullable=False
     )
 
+    # Withdrawal eligibility gate: a user only becomes eligible to withdraw
+    # once their LIFETIME total of approved deposits reaches this amount —
+    # accumulated across any number of separate deposits (e.g. two ₹10
+    # deposits count the same as one ₹20 deposit). This is independent of
+    # current wallet balance, so spending the deposited money afterwards
+    # does not revoke eligibility once it has been reached.
+    min_lifetime_deposit_for_withdrawal: Mapped[Decimal] = mapped_column(
+        Numeric(14, 2), default=20, server_default="20", nullable=False
+    )
+
     updated_by_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )

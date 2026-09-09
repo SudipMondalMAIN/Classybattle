@@ -7,6 +7,7 @@ If completed, nothing further happens to the wallet — the money is
 already gone.
 """
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Optional
 from uuid import UUID
 
@@ -20,6 +21,7 @@ from app.core.exceptions import (
     ValidationException,
 )
 from app.models.notification import NotificationEventType
+from app.models.payment import PaymentRequest, PaymentRequestStatus
 from app.models.user import User
 from app.models.withdrawal import WithdrawalRequest, WithdrawalStatus
 from app.notifications.dispatch_service import NotificationDispatchService
@@ -58,6 +60,8 @@ class WithdrawalService:
             raise ValidationException(
                 f"Maximum withdrawal amount is {settings_row.max_withdrawal_amount}"
             )
+
+        await self._ensure_deposit_eligibility(user, settings_row.min_lifetime_deposit_for_withdrawal)
 
         txn_no = await generate_unique_txn_no(self.session, WithdrawalRequest)
 
@@ -196,6 +200,29 @@ class WithdrawalService:
     # ------------------------------------------------------------------
     # Internal
     # ------------------------------------------------------------------
+    async def _ensure_deposit_eligibility(self, user: User, min_lifetime_deposit: Decimal) -> None:
+        """A user only becomes eligible to withdraw once the SUM of their
+        approved deposits (lifetime, across any number of separate
+        deposits — e.g. two ₹10 deposits count the same as one ₹20
+        deposit) reaches ``min_lifetime_deposit``. This is checked against
+        the deposit history, not the current wallet balance, so spending
+        the deposited money afterwards does not revoke eligibility once
+        it has been reached."""
+        if min_lifetime_deposit <= 0:
+            return
+
+        stmt = select(func.coalesce(func.sum(PaymentRequest.amount), 0)).where(
+            PaymentRequest.user_id == user.id,
+            PaymentRequest.status == PaymentRequestStatus.APPROVED,
+        )
+        total_deposited: Decimal = (await self.session.execute(stmt)).scalar_one()
+
+        if total_deposited < min_lifetime_deposit:
+            raise ValidationException(
+                f"You need to deposit a total of at least ₹{min_lifetime_deposit} before you "
+                f"can withdraw. You've deposited ₹{total_deposited} so far."
+            )
+
     async def _get(self, withdrawal_id: UUID) -> WithdrawalRequest:
         stmt = select(WithdrawalRequest).where(WithdrawalRequest.id == withdrawal_id)
         result = await self.session.execute(stmt)
