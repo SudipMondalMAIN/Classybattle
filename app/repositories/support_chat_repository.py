@@ -4,7 +4,7 @@ Repository for support chat sessions & messages.
 from typing import Optional, Sequence
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.support_chat import (
@@ -51,10 +51,10 @@ class SupportChatRepository(BaseRepository[SupportChatSession]):
         if status is not None:
             stmt = stmt.where(SupportChatSession.status == status)
 
-        count_stmt = select(SupportChatSession.id).where(SupportChatSession.deleted_at.is_(None))
+        count_stmt = select(func.count(SupportChatSession.id)).where(SupportChatSession.deleted_at.is_(None))
         if status is not None:
             count_stmt = count_stmt.where(SupportChatSession.status == status)
-        total = len((await self.session.execute(count_stmt)).all())
+        total = (await self.session.execute(count_stmt)).scalar_one()
 
         stmt = stmt.order_by(SupportChatSession.last_message_at.desc().nulls_last()).offset(
             (page - 1) * page_size
