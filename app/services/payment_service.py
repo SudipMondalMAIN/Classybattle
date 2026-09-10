@@ -152,6 +152,7 @@ class PaymentService:
             "max_deposit_amount": str(settings_row.max_deposit_amount),
             "min_withdrawal_amount": str(settings_row.min_withdrawal_amount),
             "max_withdrawal_amount": str(settings_row.max_withdrawal_amount),
+            "min_lifetime_deposit_for_withdrawal": str(settings_row.min_lifetime_deposit_for_withdrawal),
             "updated_by_id": str(settings_row.updated_by_id) if settings_row.updated_by_id else None,
             "updated_at": settings_row.updated_at.isoformat(),
         }
