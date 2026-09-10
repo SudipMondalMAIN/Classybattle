@@ -438,6 +438,13 @@ class LeaderboardService:
         await self.update_log_repo.mark(LeaderboardSourceEvent.PRIZE_CREDITED, source_id)
         await self.session.commit()
 
+        # total_winnings on the cached GET /users/me/stats payload just
+        # changed -- bust it so the profile screen reflects the new prize
+        # money without waiting out the TTL.
+        from app.core.cache import cache_delete, user_stats_cache_key
+
+        await cache_delete(user_stats_cache_key(user_id))
+
         await self._evaluate_achievements(
             user_id, AchievementTriggerType.PRIZE_MILESTONE, new_prize
         )
@@ -491,6 +498,13 @@ class LeaderboardService:
 
         await self.update_log_repo.mark(LeaderboardSourceEvent.TOURNAMENT_COMPLETED, source_id)
         await self.session.commit()
+
+        # tournaments_won/played changed for every participant here, which
+        # feeds the cached GET /users/me/stats payload -- bust each one.
+        from app.core.cache import cache_delete, user_stats_cache_key
+
+        for user_id in set(participant_user_ids):
+            await cache_delete(user_stats_cache_key(user_id))
 
         for user_id in set(participant_user_ids):
             stats = await self.player_stats_repo.get_by_user_id(user_id)
@@ -744,6 +758,14 @@ class LeaderboardService:
             await self.session.commit()
         else:
             await self.session.flush()
+
+        # won/total_winnings on the cached GET /users/me/stats payload just
+        # changed -- bust it. Safe to do even when commit=False (the caller
+        # commits later in the same request): a stale cache read in that
+        # narrow window is far less risky than never invalidating.
+        from app.core.cache import cache_delete, user_stats_cache_key
+
+        await cache_delete(user_stats_cache_key(user_id))
 
         await self._evaluate_achievements(user_id, AchievementTriggerType.MATCH_WIN, matches_won)
         if is_mvp:

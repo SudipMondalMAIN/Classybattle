@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.cache import cache_delete_prefix
 from app.core.exceptions import NotFoundException, ValidationException
+from app.models.audit_log import AuditAction
 from app.models.notification import NotificationEventType
 from app.models.tournament import PrizeType, Tournament, TournamentStatus
 from app.models.tournament_participant import TournamentParticipant
@@ -24,6 +25,7 @@ from app.repositories.game_repository import GameRepository, UserGameProfileRepo
 from app.repositories.tournament_participant_repository import TournamentParticipantRepository
 from app.repositories.tournament_repository import TournamentRepository
 from app.schemas.tournament_admin import MatchAdminDetailRead, MatchAdminPlayerRead, PlayerActionRead
+from app.services.audit_service import AuditService
 from app.services.tournament_result_service import TournamentResultService
 from app.services.wallet_service import WalletService
 
@@ -38,6 +40,7 @@ class TournamentAdminService:
         self.game_profile_repo = UserGameProfileRepository(session)
         self.slot_repo = TournamentParticipantRepository(session)
         self.wallet_service = WalletService(session)
+        self.audit = AuditService(session)
 
     async def _get_tournament_and_game(self, tournament_id: UUID):
         tournament = await self.tournament_repo.get_by_id(tournament_id)
@@ -373,7 +376,24 @@ class TournamentAdminService:
         # "enter amount and pay" step needed. Safe to re-run (already
         # paid rows are skipped), so a retried publish never double-pays.
         try:
-            await self.auto_pay_all(tournament_id, current_user, commit=True)
+            payout_report = await self.auto_pay_all(tournament_id, current_user, commit=True)
+            if payout_report["failed"]:
+                # Some rows didn't pay (e.g. wallet hiccup) -- the rest of
+                # the lobby is already committed and paid, so don't hide
+                # the published result, but do leave a visible trail
+                # instead of silently dropping it like before.
+                await self.audit.record(
+                    entity="tournament_result",
+                    action=AuditAction.OTHER,
+                    entity_id=result.id,
+                    actor=current_user,
+                    new_values={"failed_payouts": payout_report["failed"]},
+                    description=(
+                        f"Auto-pay for tournament '{tournament.title}' had "
+                        f"{len(payout_report['failed'])} failed payout(s) -- retry via /auto-pay"
+                    ),
+                )
+                await self.session.commit()
         except Exception:  # noqa: BLE001 - a payout hiccup must never hide the published result
             pass
 
@@ -417,7 +437,7 @@ class TournamentAdminService:
     # ------------------------------------------------------------------
     async def _credit_player(
         self, *, tournament_id: UUID, user: User, kind: str, row, amount: Decimal,
-        note: Optional[str], commit: bool,
+        note: Optional[str], commit: bool, tournament: Optional[Tournament] = None,
     ) -> PlayerActionRead:
         user_id = user.id
         await self.wallet_service.credit(
@@ -447,7 +467,11 @@ class TournamentAdminService:
             await self.session.flush()
         await self.session.refresh(row)
 
-        tournament, _game = await self._get_tournament_and_game(tournament_id)
+        # Bulk callers (auto_pay_all) already have the tournament loaded --
+        # skip the redundant per-player re-fetch (was 1 extra query x
+        # every winner, e.g. 48 for a full lobby).
+        if tournament is None:
+            tournament, _game = await self._get_tournament_and_game(tournament_id)
 
         # Fold this paid win into leaderboard/statistics -- this admin
         # flow never goes through TournamentResult approve, which is the
@@ -534,43 +558,80 @@ class TournamentAdminService:
         only the tournament's pre-configured prize_type rules -- no
         amount is ever typed in by the admin. Rows with ₹0 computed
         amount or that are already paid are silently skipped, so this is
-        safe to call repeatedly (e.g. if publish_result is retried)."""
+        safe to call repeatedly (e.g. if publish_result is retried).
+
+        Whole-lobby-in-one-request, single-commit version: all player/team
+        rows already came in with the tournament (one query), every
+        eligible winner's User is bulk-fetched in one extra query (instead
+        of one query per player), and every credit is flushed -- not
+        committed -- inside its own SAVEPOINT so one bad row can never
+        take the rest of the lobby down with it or leave a half-open
+        transaction. Exactly one real commit happens at the very end, so
+        a 48-player tournament does one DB round trip for the writes
+        instead of ~48. Failures are collected and returned instead of
+        being silently swallowed."""
         tournament, _game = await self._get_tournament_and_game(tournament_id)
         slots = await self.slot_repo.list_for_tournament(tournament.id)
 
-        from app.repositories.user_repository import UserRepository
+        # Pass 1 -- pure in-memory filtering, zero DB calls: figure out
+        # exactly which rows are eligible and for how much.
+        candidates: list[tuple[str, object, UUID]] = []
+        for slot in slots:
+            if slot.participant_id and slot.participant is not None:
+                candidates.append(("solo", slot, slot.participant.user_id))
+            elif slot.tournament_team_id and slot.tournament_team is not None:
+                for member in slot.tournament_team.members:
+                    candidates.append(("squad", member, member.user_id))
 
-        user_repo = UserRepository(self.session)
-        paid: list[PlayerActionRead] = []
         skipped: list[dict] = []
-
-        async def _maybe_pay(kind: str, row, user_id: UUID):
+        eligible: list[tuple[str, object, UUID, Decimal]] = []
+        for kind, row, user_id in candidates:
             if row.winning_paid_at is not None:
-                return
+                continue
             amount = self._auto_amount_for_row(tournament, row)
             if amount <= 0:
                 skipped.append({"user_id": str(user_id), "reason": "no amount due"})
-                return
-            user = await user_repo.get_by_id(user_id)
+                continue
+            eligible.append((kind, row, user_id, amount))
+
+        paid: list[PlayerActionRead] = []
+        failed: list[dict] = []
+        if not eligible:
+            return {"paid": paid, "skipped": skipped, "failed": failed}
+
+        # Pass 2 -- one bulk query for every winning user instead of one
+        # query per winner.
+        from sqlalchemy import select
+
+        user_ids = {user_id for _, _, user_id, _ in eligible}
+        result = await self.session.execute(select(User).where(User.id.in_(user_ids)))
+        users_by_id = {u.id: u for u in result.scalars().all()}
+
+        # Pass 3 -- settle every payout. commit=False everywhere here:
+        # each credit is isolated in its own SAVEPOINT so a failure only
+        # rolls back that one player, then we commit the whole batch once.
+        for kind, row, user_id, amount in eligible:
+            user = users_by_id.get(user_id)
             if user is None:
                 skipped.append({"user_id": str(user_id), "reason": "user not found"})
-                return
-            result = await self._credit_player(
-                tournament_id=tournament_id,
-                user=user,
-                kind=kind,
-                row=row,
-                amount=amount,
-                note=f"Automatic {tournament.prize_type.value} payout for {tournament.title}",
-                commit=commit,
-            )
-            paid.append(result)
+                continue
+            try:
+                async with self.session.begin_nested():
+                    settled = await self._credit_player(
+                        tournament_id=tournament_id,
+                        user=user,
+                        kind=kind,
+                        row=row,
+                        amount=amount,
+                        note=f"Automatic {tournament.prize_type.value} payout for {tournament.title}",
+                        commit=False,
+                        tournament=tournament,
+                    )
+                paid.append(settled)
+            except Exception as exc:  # noqa: BLE001 - isolate one bad payout, keep paying the rest
+                failed.append({"user_id": str(user_id), "reason": str(exc)})
 
-        for slot in slots:
-            if slot.participant_id and slot.participant is not None:
-                await _maybe_pay("solo", slot, slot.participant.user_id)
-            elif slot.tournament_team_id and slot.tournament_team is not None:
-                for member in slot.tournament_team.members:
-                    await _maybe_pay("squad", member, member.user_id)
+        if commit:
+            await self.session.commit()
 
-        return {"paid": paid, "skipped": skipped}
+        return {"paid": paid, "skipped": skipped, "failed": failed}

@@ -4,7 +4,13 @@ User profile API routes.
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.cache import cache_delete, cache_get, cache_set
+from app.core.cache import (
+    cache_delete,
+    cache_get,
+    cache_set,
+    user_profile_cache_key,
+    user_stats_cache_key,
+)
 from app.core.exceptions import NotFoundException
 from app.database.session import get_db_session
 from app.dependencies.auth import get_current_active_verified_user, get_current_user
@@ -28,13 +34,17 @@ router = APIRouter(prefix="/users", tags=["Users"])
 _PROFILE_CACHE_TTL = 3600
 
 
-def _profile_cache_key(user_id) -> str:
-    return f"user:profile:{user_id}"
+# Same reasoning as the profile cache above: joined/won/total_winnings/
+# win_rate only change when a registration happens or a tournament/match
+# is settled, not on every profile-screen view. Short TTL because unlike
+# the profile payload, stats should reflect a recent win reasonably
+# quickly even if we ever miss an explicit invalidation call site.
+_STATS_CACHE_TTL = 120
 
 
 @router.get("/me", response_model=UserRead)
 async def get_my_profile(current_user: User = Depends(get_current_user)):
-    cache_key = _profile_cache_key(current_user.id)
+    cache_key = user_profile_cache_key(current_user.id)
     cached = await cache_get(cache_key)
     if cached is not None:
         return UserRead.model_validate(cached)
@@ -59,6 +69,11 @@ async def get_my_tournament_stats(
     under-reports wins for anyone who has only played custom
     tournaments. `joined` still comes from the real registration count.
     """
+    cache_key = user_stats_cache_key(current_user.id)
+    cached = await cache_get(cache_key)
+    if cached is not None:
+        return MyTournamentStatsRead.model_validate(cached)
+
     _, joined = await ParticipantService(session).registration_history(
         current_user,
         page=1,
@@ -85,12 +100,14 @@ async def get_my_tournament_stats(
         total_winnings = 0
         win_rate = None
 
-    return MyTournamentStatsRead(
+    result = MyTournamentStatsRead(
         joined=joined,
         won=won,
         total_winnings=total_winnings,
         win_rate=win_rate,
     )
+    await cache_set(cache_key, result.model_dump(mode="json"), ttl=_STATS_CACHE_TTL)
+    return result
 
 
 @router.patch("/me", response_model=UserRead)
@@ -101,5 +118,5 @@ async def update_my_profile(
 ):
     service = UserService(session)
     updated_user = await service.update_profile(current_user.id, payload)
-    await cache_delete(_profile_cache_key(current_user.id))
+    await cache_delete(user_profile_cache_key(current_user.id))
     return UserRead.model_validate(updated_user)

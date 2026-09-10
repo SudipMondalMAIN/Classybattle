@@ -119,6 +119,14 @@ async def cache_delete(key: str) -> None:
         logger.warning("cache_delete_failed", key=key, error=str(exc))
 
 
+def user_profile_cache_key(user_id) -> str:
+    return f"user:profile:{user_id}"
+
+
+def user_stats_cache_key(user_id) -> str:
+    return f"user:stats:{user_id}"
+
+
 async def cache_delete_prefix(prefix: str) -> None:
     """Deletes every key starting with `prefix` -- used to invalidate an
     entire namespace (e.g. all cached tournament list pages/filters) on

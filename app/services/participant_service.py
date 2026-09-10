@@ -406,6 +406,13 @@ class ParticipantService:
         await self.session.commit()
         await self.session.refresh(participant)
 
+        # New registration changes the "joined" count on the profile-screen
+        # stats card (GET /users/me/stats), which is cached -- bust it so
+        # the count shows up on next load instead of waiting out the TTL.
+        from app.core.cache import cache_delete, user_stats_cache_key
+
+        await cache_delete(user_stats_cache_key(current_user.id))
+
         if entry_fee_required:
             try:
                 from app.services.referral_service import ReferralService
