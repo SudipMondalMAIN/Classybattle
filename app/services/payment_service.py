@@ -547,7 +547,7 @@ class PaymentService:
 
         if payment_request.wallet_transaction_id is not None:
             await self.wallet_service.cancel_pending_deposit(
-                payment_request.wallet_transaction_id, failed=True
+                payment_request.wallet_transaction_id, failed=True, note=note
             )
 
         payment_request = await self.request_repo.update(

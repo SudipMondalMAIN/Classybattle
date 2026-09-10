@@ -258,7 +258,11 @@ class WithdrawalService:
                 amount=withdrawal.amount,
                 reference_type=_REFERENCE_TYPE,
                 reference_id=str(withdrawal.id),
-                description=f"Withdrawal {withdrawal.id} cancelled/refunded",
+                description=(
+                    f"Withdrawal cancelled/refunded — {admin_note}"
+                    if admin_note
+                    else f"Withdrawal {withdrawal.id} cancelled/refunded"
+                ),
                 commit=False,
             )
 

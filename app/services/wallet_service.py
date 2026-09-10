@@ -402,17 +402,21 @@ class WalletService:
         return txn
 
     async def cancel_pending_deposit(
-        self, transaction_id: UUID, *, failed: bool = True
+        self, transaction_id: UUID, *, failed: bool = True, note: Optional[str] = None
     ) -> WalletTransaction:
         """Transition a PENDING deposit CREDIT to FAILED/CANCELLED (called
         when an admin rejects/holds it). No balance change — it was never
-        applied while pending."""
+        applied while pending. If the admin left a note, fold it into the
+        transaction description so it's visible in the user's txn history."""
         txn = await self.txn_repo.get_by_id(transaction_id)
         if txn is None:
             raise NotFoundException("Transaction not found")
         if txn.status != WalletTransactionStatus.PENDING:
             raise ConflictException(f"Transaction is already {txn.status.value}")
         txn.status = WalletTransactionStatus.FAILED if failed else WalletTransactionStatus.CANCELLED
+        if note:
+            status_word = "rejected" if failed else "cancelled"
+            txn.description = f"Deposit {status_word} — {note}"
         await self.session.flush()
         return txn
 
