@@ -169,11 +169,19 @@ async def get_public_result(tournament_id: UUID, session: AsyncSession = Depends
 
 
 @router.get("/{tournament_id}/image")
-async def get_public_result_image(tournament_id: UUID, session: AsyncSession = Depends(get_db_session)):
+async def get_public_result_image(
+    tournament_id: UUID,
+    download: bool = Query(False, description="Force a file download instead of inline display"),
+    session: AsyncSession = Depends(get_db_session),
+):
     """
     Shareable JPG for this result. The rendered bytes are cached alongside
     the detail data (see module docstring) — a cache hit skips the DB
     query AND the Pillow render entirely.
+
+    `?download=true` switches Content-Disposition to `attachment` so a
+    plain link/button click saves the file instead of just opening it in
+    the browser tab (which is all a bare `inline` disposition guarantees).
     """
     image_cache_key = f"public_result:image:{tournament_id}"
     cached_b64 = await cache_get(image_cache_key)
@@ -188,11 +196,12 @@ async def get_public_result_image(tournament_id: UUID, session: AsyncSession = D
         image_bytes = buffer.read()
         await cache_set(image_cache_key, base64.b64encode(image_bytes).decode("ascii"), ttl=CACHE_TTL_RESULT)
 
+    disposition = "attachment" if download else "inline"
     return Response(
         content=image_bytes,
         media_type="image/jpeg",
         headers={
-            "Content-Disposition": f'inline; filename="{detail.tournament_uid}-result.jpg"',
+            "Content-Disposition": f'{disposition}; filename="{detail.tournament_uid}-result.jpg"',
             # Public + long-lived: browsers/CDNs may cache too, since an
             # approved result's image never changes.
             "Cache-Control": "public, max-age=86400",

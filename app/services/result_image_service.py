@@ -27,6 +27,7 @@ Requires Pillow (already in requirements.txt).
 """
 from io import BytesIO
 from pathlib import Path
+from typing import Optional
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -63,6 +64,40 @@ PADDING = 26
 MAX_PARTICIPANTS_SHOWN = 40
 
 FONT_DIR = Path(__file__).resolve().parent.parent / "assets" / "fonts"
+LOGO_PATH = Path(__file__).resolve().parent.parent / "assets" / "images" / "logo.png"
+_LOGO_CACHE: dict[int, Image.Image] = {}
+
+
+def _logo(size: int) -> Optional[Image.Image]:
+    """Loads the bundled ClassyBattle logo, scaled to `size` (px, in the
+    *supersampled* canvas -- pass an already-S()'d value), resampled once
+    per size and cached. Returns None if the asset is missing so callers
+    can fall back gracefully instead of crashing the render."""
+    if size in _LOGO_CACHE:
+        return _LOGO_CACHE[size]
+    if not LOGO_PATH.exists():
+        return None
+    try:
+        img = Image.open(LOGO_PATH).convert("RGBA")
+        img = img.resize((size, size), Image.LANCZOS)
+    except OSError:
+        return None
+    _LOGO_CACHE[size] = img
+    return img
+
+
+def _paste_logo(canvas: Image.Image, cx: float, cy: float, diameter: float) -> bool:
+    """Pastes the logo centered at logical (cx, cy) with the given logical
+    diameter. Returns True if it actually drew something, so callers can
+    fall back to the old text badge when the asset isn't bundled."""
+    size = max(1, round(S(diameter)))
+    logo = _logo(size)
+    if logo is None:
+        return False
+    x0 = round(S(cx) - size / 2)
+    y0 = round(S(cy) - size / 2)
+    canvas.paste(logo, (x0, y0), logo)
+    return True
 _SYSTEM_FONT_CANDIDATES = {
     False: [
         FONT_DIR / "Inter-Regular.ttf",
@@ -199,6 +234,7 @@ class ResultImageService:
         f_panel = _font(15, bold=True)
         f_th = _font(11, bold=True)
         f_td = _font(13)
+        f_td_uid = _font(10)
         f_td_b = _font(13, bold=True)
         f_wname = _font(15, bold=True)
         f_wsub = _font(11)
@@ -231,8 +267,9 @@ class ResultImageService:
         _line(d, [(0, 300), (WIDTH, 300)], fill=LINE, width=2)
 
         bx, by = WIDTH // 2 - 130, 34
-        _rounded(d, (bx, by, bx + 50, by + 50), 8, outline=PURPLE_L, width=2)
-        _center(d, bx + 25, by + 25, "CB", _font(20, bold=True), (255, 255, 255))
+        if not _paste_logo(img, bx + 25, by + 25, 50):
+            _rounded(d, (bx, by, bx + 50, by + 50), 8, outline=PURPLE_L, width=2)
+            _center(d, bx + 25, by + 25, "CB", _font(20, bold=True), (255, 255, 255))
         _text(d, (bx + 62, by), "Classy", f_brand, (255, 255, 255))
         w_classy = _textlength(d, "Classy", f_brand)
         _text(d, (bx + 62 + w_classy, by), "Battle", f_brand, PURPLE_L)
@@ -278,7 +315,7 @@ class ResultImageService:
         px0, py0 = panel(left_x0, top, col_w, col_h, f"PARTICIPANTS LIST ({len(participants)})")
         px1 = left_x0 + col_w - 16
         cols = [px0, px0 + 30, px0 + 150, px0 + 300]
-        headers = ["#", "PLAYER NAME", "UID", stat_header]
+        headers = ["#", "PLAYER NAME", "GAME UID / CB UID", stat_header]
         for cx, htext in zip(cols, headers):
             _text(d, (cx, py0), htext, f_th, (168, 155, 214))
         hy = py0 + 18
@@ -287,7 +324,8 @@ class ResultImageService:
         for idx, p in enumerate(shown_participants, start=1):
             _text(d, (cols[0], ry), str(p.rank or idx), f_td, MUTED)
             _text(d, (cols[1], ry), _clean(p.name)[:18], f_td, TEXT)
-            _text(d, (cols[2], ry), p.game_uid or "-", f_td, TEXT)
+            uid_line = f"{p.game_uid or '-'} / {p.player_uid or '-'}"
+            _text(d, (cols[2], ry + 1), uid_line, f_td_uid, MUTED)
             if show_position:
                 stat_val = _position_label(p.rank or idx, len(participants))
             elif show_kills:
@@ -338,13 +376,13 @@ class ResultImageService:
             _text(d, (tx, cy - 24), _clean(w.name)[:20], f_wname, (255, 255, 255))
 
             if show_kills:
-                sub = f"UID: {w.game_uid or '-'}   |   ELIMINATIONS "
+                sub = f"UID: {w.game_uid or '-'} / CB: {w.player_uid or '-'}   |   ELIMINATIONS "
                 _text(d, (tx, cy + 2), sub, f_wsub, MUTED)
                 subw = _textlength(d, sub, f_wsub)
                 elim_val = str(w.kills) if w.kills is not None else "-"
                 _text(d, (tx + subw, cy + 2), elim_val, f_wsub_b, PURPLE_L)
             else:
-                sub = f"UID: {w.game_uid or '-'}"
+                sub = f"UID: {w.game_uid or '-'} / CB: {w.player_uid or '-'}"
                 _text(d, (tx, cy + 2), sub, f_wsub, MUTED)
 
             rx = wx1 - 6
@@ -361,8 +399,9 @@ class ResultImageService:
         _center(d, WIDTH // 2, fy + 32, "THANK YOU TO ALL THE PARTICIPANTS!", f_footer, PURPLE_L)
         _center(d, WIDTH // 2, fy + 54, "STAY TUNED FOR MORE EXCITING TOURNAMENTS ONLY ON", f_footer_s, (139, 127, 181))
         fbx, fby = WIDTH // 2 - 66, fy + 76
-        _rounded(d, (fbx, fby, fbx + 28, fby + 28), 6, outline=PURPLE_L, width=2)
-        _center(d, fbx + 14, fby + 14, "CB", _font(12, bold=True), (255, 255, 255))
+        if not _paste_logo(img, fbx + 14, fby + 14, 28):
+            _rounded(d, (fbx, fby, fbx + 28, fby + 28), 6, outline=PURPLE_L, width=2)
+            _center(d, fbx + 14, fby + 14, "CB", _font(12, bold=True), (255, 255, 255))
         f_fb = _font(16, bold=True)
         _text(d, (fbx + 38, fby + 4), "Classy", f_fb, (255, 255, 255))
         w2 = _textlength(d, "Classy", f_fb)

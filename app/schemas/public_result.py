@@ -29,6 +29,7 @@ def _extract_game_uid(game_profile) -> Optional[str]:
 class PublicPlayerEntry(BaseModel):
     name: str
     game_uid: Optional[str] = None
+    player_uid: Optional[str] = None
     kills: Optional[int] = None
     is_winner: bool = False
     rank: Optional[int] = None
@@ -64,6 +65,10 @@ class PublicResultDetail(BaseModel):
             if w.participant is not None:
                 name = w.participant.user.full_name if getattr(w.participant, "user", None) else "Player"
                 uid = _extract_game_uid(getattr(w.participant, "game_profile", None))
+                # The site's own ClassyBattle player UID (User.player_uid) —
+                # shown alongside the in-game UID so results are traceable
+                # back to the platform account, not just the game account.
+                player_uid = getattr(getattr(w.participant, "user", None), "player_uid", None)
                 # kills/winning_amount live on TournamentParticipant, not on
                 # TournamentWinner itself — pull them across so the winner
                 # card can show eliminations + reward, same as the
@@ -73,12 +78,19 @@ class PublicResultDetail(BaseModel):
             elif w.team is not None:
                 name = w.team.team_name
                 uid = None
+                player_uid = None
+                # Team-tournament winners weren't showing a prize amount on
+                # the result poster/JPG because this branch never pulled
+                # winning_amount across -- it lives on TournamentTeam, not
+                # on TournamentWinner, same as the participant branch above.
+                winning_amount = getattr(w.team, "winning_amount", None)
             else:
                 continue
             winner_entries.append(
                 PublicPlayerEntry(
                     name=name,
                     game_uid=uid,
+                    player_uid=player_uid,
                     kills=kills,
                     is_winner=True,
                     rank=w.rank,
@@ -91,15 +103,18 @@ class PublicResultDetail(BaseModel):
             if p.participant is not None:
                 name = p.participant.user.full_name if getattr(p.participant, "user", None) else "Player"
                 uid = _extract_game_uid(getattr(p.participant, "game_profile", None))
+                player_uid = getattr(getattr(p.participant, "user", None), "player_uid", None)
             elif p.team is not None:
                 name = p.team.team_name
                 uid = None
+                player_uid = None
             else:
                 continue
             participant_entries.append(
                 PublicPlayerEntry(
                     name=name,
                     game_uid=uid,
+                    player_uid=player_uid,
                     kills=p.kills,
                     is_winner=p.is_winner,
                     rank=p.rank,
