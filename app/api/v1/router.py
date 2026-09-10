@@ -24,6 +24,7 @@ from app.api.v1.leaderboard_routes import router as leaderboard_router
 from app.api.v1.map_routes import router as map_router
 from app.api.v1.moderation_routes import router as moderation_router
 from app.api.v1.notification_routes import router as notification_router
+from app.api.v1.promotional_campaign_routes import router as promotional_campaign_router
 from app.api.v1.participant_routes import router as participant_router
 from app.api.v1.payment_routes import router as payment_router
 from app.api.v1.payment_method_routes import router as payment_method_router
@@ -62,6 +63,7 @@ api_v1_router.include_router(tournament_router)
 api_v1_router.include_router(tournament_admin_router)
 api_v1_router.include_router(tournament_result_router)
 api_v1_router.include_router(notification_router)
+api_v1_router.include_router(promotional_campaign_router)
 api_v1_router.include_router(leaderboard_router)
 api_v1_router.include_router(social_router)
 api_v1_router.include_router(achievement_router)

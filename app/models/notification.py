@@ -51,6 +51,7 @@ class NotificationEventType(str, enum.Enum):
     REFUND_COMPLETED = "refund_completed"
     ADMIN_BROADCAST = "admin_broadcast"
     SYSTEM_ANNOUNCEMENT = "system_announcement"
+    PROMOTIONAL = "promotional"
 
 
 class Notification(BaseModel):

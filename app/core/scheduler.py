@@ -36,14 +36,32 @@ from app.core.logging import get_logger
 from app.database.session import AsyncSessionLocal
 from app.models.tournament import TournamentStatus
 from app.repositories.tournament_repository import TournamentRepository
+from app.services.promotional_campaign_service import PromotionalCampaignService
 from app.services.slot_generator_service import IST, SlotGeneratorService
 from app.services.tournament_service import TournamentService
 
 logger = get_logger("slot_scheduler")
 
 LIVE_AUTO_COMPLETE_INTERVAL_MINUTES = 10
+PROMOTIONAL_CAMPAIGN_CHECK_INTERVAL_MINUTES = 15
 
 _scheduler: AsyncIOScheduler | None = None
+
+
+async def _send_due_promotional_campaigns() -> None:
+    """Frequent tick: sends any active promotional campaign (ONCE/DAILY/
+    INTERVAL_HOURS) whose schedule is due right now. See
+    PromotionalCampaignService.send_due_campaigns() for the due-check and
+    PromotionalCampaign admin routes for how campaigns get created."""
+    async with AsyncSessionLocal() as session:
+        try:
+            service = PromotionalCampaignService(session)
+            sent = await service.send_due_campaigns()
+            if sent:
+                logger.info("promotional_campaigns_tick", campaigns_sent=sent)
+        except Exception:  # noqa: BLE001 - never let the scheduler die
+            logger.exception("promotional_campaigns_tick_failed")
+            await session.rollback()
 
 
 async def _auto_complete_live_tournaments() -> None:
@@ -175,11 +193,21 @@ def start_slot_scheduler() -> None:
         max_instances=1,
         misfire_grace_time=3600,
     )
+    _scheduler.add_job(
+        _send_due_promotional_campaigns,
+        "interval",
+        minutes=PROMOTIONAL_CAMPAIGN_CHECK_INTERVAL_MINUTES,
+        id="promotional_campaigns",
+        next_run_time=datetime.now(timezone.utc),  # also run once immediately on startup
+        coalesce=True,
+        max_instances=1,
+    )
     _scheduler.start()
     logger.info(
         "slot_scheduler_started",
         live_auto_complete_interval_minutes=LIVE_AUTO_COMPLETE_INTERVAL_MINUTES,
         daily_rollover="01:00 IST",
+        promotional_campaign_check_interval_minutes=PROMOTIONAL_CAMPAIGN_CHECK_INTERVAL_MINUTES,
     )
 
 

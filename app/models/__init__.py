@@ -69,6 +69,7 @@ from app.models.notification import (
     NotificationStatus,
 )
 from app.models.otp import OTP
+from app.models.promotional_campaign import PromotionalCampaign, PromotionalScheduleType
 from app.models.payment import (
     PaymentProvider,
     PaymentRejectionReason,
@@ -165,6 +166,8 @@ __all__ = [
     "MaintenanceConfig",
     "User",
     "OTP",
+    "PromotionalCampaign",
+    "PromotionalScheduleType",
     "RefreshToken",
     "Game",
     "GameMode",
