@@ -119,6 +119,18 @@ class PromotionalCampaignService:
                 last_ist = campaign.last_sent_at.astimezone(IST)
                 if last_ist.date() == now_ist.date():
                     return False  # already sent today
+            else:
+                # Never sent yet. If the campaign was created *after* today's
+                # target time (e.g. admin activates a "Good Morning" 8 AM
+                # campaign at 7 PM), don't fire it right away — that reads as
+                # the campaign going off at a random/wrong time. Wait for the
+                # next real occurrence of the target time instead.
+                created_ist = campaign.created_at.astimezone(IST)
+                if created_ist.date() == now_ist.date():
+                    created_minutes = created_ist.hour * 60 + created_ist.minute
+                    target_minutes = campaign.send_hour * 60 + campaign.send_minute
+                    if created_minutes > target_minutes:
+                        return False  # wait for tomorrow's occurrence
             target_minutes = campaign.send_hour * 60 + campaign.send_minute
             now_minutes = now_ist.hour * 60 + now_ist.minute
             # Fire once we're at/past the target time today. Combined with
